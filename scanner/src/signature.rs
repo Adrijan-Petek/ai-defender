@@ -9,8 +9,7 @@ pub fn set_low_priority() -> anyhow::Result<()> {
   // This does not escalate privileges and is scoped to the scanner process.
   unsafe {
     let proc = GetCurrentProcess();
-    let ok = SetPriorityClass(proc, BELOW_NORMAL_PRIORITY_CLASS).as_bool();
-    if !ok {
+    if SetPriorityClass(proc, BELOW_NORMAL_PRIORITY_CLASS).is_err() {
       return Err(anyhow::anyhow!("SetPriorityClass failed"));
     }
   }
@@ -24,15 +23,16 @@ pub fn set_low_priority() -> anyhow::Result<()> {
 
 #[cfg(windows)]
 pub fn fixed_drives() -> Vec<std::path::PathBuf> {
-  use windows::Win32::Storage::FileSystem::{GetDriveTypeW, DRIVE_FIXED};
+  use windows::Win32::Storage::FileSystem::GetDriveTypeW;
   use windows::core::PCWSTR;
   let mut out = Vec::new();
+  const DRIVE_FIXED_U32: u32 = 3;
   for letter in b'C'..=b'Z' {
     let root = format!("{}:\\", letter as char);
     let wide: Vec<u16> = root.encode_utf16().chain([0]).collect();
     // SAFETY: `wide` is null-terminated.
     let t = unsafe { GetDriveTypeW(PCWSTR(wide.as_ptr())) };
-    if t == DRIVE_FIXED {
+    if t == DRIVE_FIXED_U32 {
       out.push(std::path::PathBuf::from(root));
     }
   }
@@ -67,7 +67,7 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
     cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
     pcwszFilePath: windows::core::PCWSTR(wide.as_ptr()),
     hFile: HANDLE::default(),
-    pgKnownSubject: std::ptr::null(),
+    pgKnownSubject: std::ptr::null_mut(),
   };
 
   let mut data = WINTRUST_DATA {
@@ -86,12 +86,12 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
     dwUIContext: 0,
   };
 
-  let action: GUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-  let status = unsafe { WinVerifyTrust(HWND(0), &action, &mut data as *mut _ as *mut _) };
+  let mut action: GUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+  let status = unsafe { WinVerifyTrust(HWND(0), &mut action, &mut data as *mut _ as *mut _) };
 
   // Close state data if created.
   data.dwStateAction = WTD_STATEACTION_CLOSE;
-  let _ = unsafe { WinVerifyTrust(HWND(0), &action, &mut data as *mut _ as *mut _) };
+  let _ = unsafe { WinVerifyTrust(HWND(0), &mut action, &mut data as *mut _ as *mut _) };
 
   Ok(status == ERROR_SUCCESS.0 as i32)
 }

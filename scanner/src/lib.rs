@@ -51,7 +51,7 @@ pub fn run(mode: ScanMode) -> anyhow::Result<()> {
 
   let excludes: Vec<String> = cfg
     .excludes
-    .into_iter()
+    .iter()
     .map(|s| s.to_ascii_lowercase())
     .collect();
 
@@ -180,11 +180,11 @@ fn quick_roots() -> Vec<PathBuf> {
     roots.push(PathBuf::from(pfx));
   }
   if let Ok(appdata) = std::env::var("APPDATA") {
-    roots.push(PathBuf::from(appdata));
-    roots.push(PathBuf::from(appdata).join("Microsoft").join("Windows").join("Start Menu"));
+    roots.push(PathBuf::from(&appdata));
+    roots.push(PathBuf::from(&appdata).join("Microsoft").join("Windows").join("Start Menu"));
   }
   if let Ok(local) = std::env::var("LOCALAPPDATA") {
-    roots.push(PathBuf::from(local));
+    roots.push(PathBuf::from(&local));
     roots.extend(browser_extension_roots(&local));
   }
 
