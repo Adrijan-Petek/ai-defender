@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build agent-core
+        run: cargo build -p agent-core --verbose
+
+      - name: Build scanner
+        run: cargo build -p scanner --verbose
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Tray UI
+        run: dotnet build ui/AI.Defender.Tray/AI.Defender.Tray.csproj -c Release
