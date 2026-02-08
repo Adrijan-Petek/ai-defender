@@ -1,5 +1,6 @@
 use crate::config::{AllowlistConfig, Config};
 use crate::types::{Evidence, Event, FileAccessType, Finding, Incident, Severity};
+use super::protected_paths;
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]

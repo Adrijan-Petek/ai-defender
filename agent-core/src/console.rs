@@ -417,10 +417,4 @@ fn print_admin_hint(e: &anyhow::Error) {
   }
 }
 
-fn now_unix_ms() -> u64 {
-  use std::time::{SystemTime, UNIX_EPOCH};
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .unwrap_or_default()
-    .as_millis() as u64
-}
+// NOTE: `now_unix_ms` is provided by `crate::types`.

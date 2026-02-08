@@ -168,7 +168,7 @@ fn parse_sysmon_xml(xml: &str, c: &mut SysmonCollector) -> anyhow::Result<Vec<Ev
 
         if in_system {
           if let Some(tag) = current_tag.as_deref() {
-            match tag.as_str() {
+            match tag {
               "EventID" => {
                 event_id = text.trim().parse::<u32>().ok();
               }

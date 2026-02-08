@@ -89,14 +89,11 @@ pub fn rules_status() -> anyhow::Result<FirewallRuleStatus> {
 #[cfg(windows)]
 mod com {
   use super::*;
-  use windows::core::{BSTR, ComInterface, Result as WinResult};
-  use windows::Win32::Foundation::{
-    E_ACCESSDENIED, ERROR_FILE_NOT_FOUND, HRESULT_FROM_WIN32, VARIANT_TRUE,
-  };
+  use windows::core::{BSTR, HRESULT, Result as WinResult};
+  use windows::Win32::Foundation::{E_ACCESSDENIED, ERROR_FILE_NOT_FOUND, VARIANT_TRUE};
   use windows::Win32::NetworkManagement::WindowsFirewall::{
-    INetFwPolicy2, INetFwRule, NetFwPolicy2, NetFwRule, NET_FW_ACTION_BLOCK,
-    NET_FW_IP_PROTOCOL_ANY, NET_FW_PROFILE2_ALL, NET_FW_RULE_DIRECTION_IN,
-    NET_FW_RULE_DIRECTION_OUT,
+    INetFwPolicy2, INetFwRule, NetFwPolicy2, NetFwRule, NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
+    NET_FW_PROFILE2_ALL, NET_FW_RULE_DIRECTION,
   };
   use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
@@ -106,10 +103,10 @@ mod com {
     with_com(|| {
       let policy: INetFwPolicy2 =
         unsafe { CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER) }?;
-      let rules = policy.Rules()?;
+      let rules = unsafe { policy.Rules()? };
 
-      ensure_rule(&rules, RULE_OUT_NAME, NET_FW_RULE_DIRECTION_OUT)?;
-      ensure_rule(&rules, RULE_IN_NAME, NET_FW_RULE_DIRECTION_IN)?;
+      ensure_rule(&rules, RULE_OUT_NAME, NET_FW_RULE_DIRECTION::NET_FW_RULE_DIR_OUT)?;
+      ensure_rule(&rules, RULE_IN_NAME, NET_FW_RULE_DIRECTION::NET_FW_RULE_DIR_IN)?;
 
       Ok(())
     })
@@ -119,7 +116,7 @@ mod com {
     with_com(|| {
       let policy: INetFwPolicy2 =
         unsafe { CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER) }?;
-      let rules = policy.Rules()?;
+      let rules = unsafe { policy.Rules()? };
 
       remove_rule_if_ours(&rules, RULE_OUT_NAME)?;
       remove_rule_if_ours(&rules, RULE_IN_NAME)?;
@@ -132,7 +129,7 @@ mod com {
     with_com(|| {
       let policy: INetFwPolicy2 =
         unsafe { CoCreateInstance(&NetFwPolicy2, None, CLSCTX_INPROC_SERVER) }?;
-      let rules = policy.Rules()?;
+      let rules = unsafe { policy.Rules()? };
 
       let out_ok = is_rule_ours(&rules, RULE_OUT_NAME).unwrap_or(false);
       let in_ok = is_rule_ours(&rules, RULE_IN_NAME).unwrap_or(false);
@@ -149,8 +146,12 @@ mod com {
     // SAFETY: Windows Firewall management is exposed via COM APIs. `CoInitializeEx`,
     // `CoUninitialize`, and `CoCreateInstance` require `unsafe` calls in the Windows bindings.
     // We keep the unsafe surface minimal and scoped.
-    unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
-      .map_err(|e| anyhow::anyhow!("COM unavailable: CoInitializeEx failed: {e:?}"))?;
+    let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+    if hr.is_err() {
+      return Err(anyhow::anyhow!(
+        "COM unavailable: CoInitializeEx failed: {hr:?}"
+      ));
+    }
     let _guard = ComGuard;
     let res = f().map_err(|e| anyhow::anyhow!("{e:?}"))?;
     Ok(res)
@@ -166,7 +167,7 @@ mod com {
   fn ensure_rule(
     rules: &windows::Win32::NetworkManagement::WindowsFirewall::INetFwRules,
     name: &str,
-    direction: windows::Win32::NetworkManagement::WindowsFirewall::NET_FW_RULE_DIRECTION,
+    direction: NET_FW_RULE_DIRECTION,
   ) -> WinResult<()> {
     match rules.Item(&BSTR::from(name)) {
       Ok(rule) => {
@@ -182,7 +183,7 @@ mod com {
         Ok(())
       }
       Err(e) => {
-        let not_found = e.code() == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND.0);
+        let not_found = e.code() == hresult_from_win32(ERROR_FILE_NOT_FOUND.0);
         if !not_found {
           return Err(e);
         }
@@ -198,18 +199,18 @@ mod com {
   fn apply_rule_properties(
     rule: &INetFwRule,
     name: &str,
-    direction: windows::Win32::NetworkManagement::WindowsFirewall::NET_FW_RULE_DIRECTION,
+    direction: NET_FW_RULE_DIRECTION,
   ) -> WinResult<()> {
-    rule.put_Name(&BSTR::from(name))?;
-    rule.put_Grouping(&BSTR::from(FIREWALL_RULE_GROUP))?;
-    rule.put_Enabled(VARIANT_TRUE)?;
-    rule.put_Action(NET_FW_ACTION_BLOCK)?;
-    rule.put_Direction(direction)?;
-    rule.put_Profiles(NET_FW_PROFILE2_ALL.0 as i32)?;
-    rule.put_Protocol(NET_FW_IP_PROTOCOL_ANY.0 as i32)?;
-    rule.put_LocalAddresses(&BSTR::from("*"))?;
-    rule.put_RemoteAddresses(&BSTR::from("*"))?;
-    rule.put_Description(&BSTR::from(
+    rule.SetName(&BSTR::from(name))?;
+    rule.SetGrouping(&BSTR::from(FIREWALL_RULE_GROUP))?;
+    rule.SetEnabled(VARIANT_TRUE)?;
+    rule.SetAction(NET_FW_ACTION_BLOCK)?;
+    rule.SetDirection(direction)?;
+    rule.SetProfiles(NET_FW_PROFILE2_ALL.0 as i32)?;
+    rule.SetProtocol(NET_FW_IP_PROTOCOL_ANY.0 as i32)?;
+    rule.SetLocalAddresses(&BSTR::from("*"))?;
+    rule.SetRemoteAddresses(&BSTR::from("*"))?;
+    rule.SetDescription(&BSTR::from(
       "AI Defender: emergency network kill switch (blocks all inbound+outbound).",
     ))?;
     Ok(())
@@ -222,7 +223,7 @@ mod com {
     let rule = match rules.Item(&BSTR::from(name)) {
       Ok(r) => r,
       Err(e) => {
-        let not_found = e.code() == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND.0);
+        let not_found = e.code() == hresult_from_win32(ERROR_FILE_NOT_FOUND.0);
         if not_found {
           return Ok(false);
         }
@@ -240,7 +241,7 @@ mod com {
     let rule = match rules.Item(&BSTR::from(name)) {
       Ok(r) => r,
       Err(e) => {
-        let not_found = e.code() == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND.0);
+        let not_found = e.code() == hresult_from_win32(ERROR_FILE_NOT_FOUND.0);
         if not_found {
           return Ok(());
         }
@@ -256,6 +257,16 @@ mod com {
 
     let _ = rules.Remove(&BSTR::from(name));
     Ok(())
+  }
+
+  fn hresult_from_win32(code: u32) -> HRESULT {
+    // `HRESULT_FROM_WIN32(x)` for common Win32 error codes (x <= 0xFFFF).
+    // Used only for equality checks (e.g., "file not found").
+    if code == 0 {
+      HRESULT(0)
+    } else {
+      HRESULT(((code & 0xFFFF) | 0x80070000) as i32)
+    }
   }
 }
 
