@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WiX authoring scaffolding for AI Defender.
+  This is a baseline template and may require environment-specific adjustments.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="AI Defender"
+    Manufacturer="(Publisher Placeholder)"
+    Version="0.1.0"
+    UpgradeCode="{2E5A5FE1-0BC1-4D6F-8B0B-61B7B3A5D6F1}">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of AI Defender is already installed." />
+
+    <MediaTemplate />
+
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="AI Defender">
+        <Component Id="cmpAgent" Guid="{9F9B6A71-0D2E-4B8E-8E4A-9F1A9E44B7B3}">
+          <File Id="filAgent" Source="$(var.SourceDir)\agent-core.exe" KeyPath="yes" />
+          <ServiceInstall
+            Id="svcInstall"
+            Name="AI_DEFENDER_AGENT"
+            DisplayName="AI Defender Agent"
+            Description="AI Defender behavior-based security agent"
+            Type="ownProcess"
+            Start="auto"
+            ErrorControl="normal" />
+          <ServiceControl
+            Id="svcControl"
+            Name="AI_DEFENDER_AGENT"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes" />
+        </Component>
+
+        <Component Id="cmpScanner" Guid="{0D3E2D0C-2C8E-46E5-9D2A-7D5D2E1A64C1}">
+          <File Id="filScanner" Source="$(var.SourceDir)\scanner.exe" KeyPath="yes" />
+        </Component>
+
+        <Component Id="cmpTray" Guid="{6AA3F66B-0C10-4E2D-9C46-2C86B1B0B8A1}">
+          <File Id="filTray" Source="$(var.SourceDir)\AI.Defender.Tray.exe" KeyPath="yes" />
+          <File Id="filProductToml" Source="$(var.SourceDir)\PRODUCT.toml" />
+          <!-- Per-user autostart -->
+          <RegistryValue
+            Root="HKCU"
+            Key="Software\Microsoft\Windows\CurrentVersion\Run"
+            Name="AI Defender"
+            Value="&quot;[INSTALLFOLDER]AI.Defender.Tray.exe&quot;"
+            Type="string"
+            Action="write" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="featMain" Title="AI Defender" Level="1">
+      <ComponentRef Id="cmpAgent" />
+      <ComponentRef Id="cmpScanner" />
+      <ComponentRef Id="cmpTray" />
+    </Feature>
+
+    <!-- Uninstall cleanup: remove only AI Defender kill switch rules. -->
+    <CustomAction
+      Id="caRemoveFirewallOut"
+      Execute="deferred"
+      Return="ignore"
+      Impersonate="no"
+      ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule name=&quot;AI Defender KillSwitch Outbound&quot; group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
+    <CustomAction
+      Id="caRemoveFirewallIn"
+      Execute="deferred"
+      Return="ignore"
+      Impersonate="no"
+      ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule name=&quot;AI Defender KillSwitch Inbound&quot; group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
+
+    <InstallExecuteSequence>
+      <Custom Action="caRemoveFirewallOut" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="caRemoveFirewallIn" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

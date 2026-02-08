@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+  "agent-core",
+  "scanner",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+ctrlc = "3"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4"] }
+windows = { version = "0.56", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_WindowsFirewall",
+  "Win32_Security_WinTrust",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Threading",
+] }
+quick-xml = { version = "0.31", features = ["serialize"] }
+sha2 = "0.10"
+walkdir = "2"
