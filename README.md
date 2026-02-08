@@ -1,5 +1,4 @@
 # AI Defender
-
 ![AI Defender logo](assets/ai-defender.png)
 
 Behavior-based Windows security (early-stage, learning mode by default)
