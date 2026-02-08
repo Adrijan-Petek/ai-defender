@@ -49,12 +49,12 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
   use std::ffi::OsStr;
   use std::os::windows::ffi::OsStrExt;
   use windows::core::GUID;
-  use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, HWND};
+  use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, HWND, PWSTR};
   use windows::Win32::Security::WinTrust::{
     WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0,
     WINTRUST_FILE_INFO,
     WTD_CHOICE_FILE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY,
-    WTD_UI_NONE, WTD_CACHE_ONLY_URL_RETRIEVAL,
+    WTD_UI_NONE, WTD_CACHE_ONLY_URL_RETRIEVAL, WINTRUST_DATA_UICONTEXT,
   };
 
   // SAFETY: WinVerifyTrust requires Win32 structs and pointers. We keep this isolated.
@@ -80,10 +80,11 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
     Anonymous: WINTRUST_DATA_0 { pFile: &mut file_info },
     dwStateAction: WTD_STATEACTION_VERIFY,
     hWVTStateData: HANDLE::default(),
-    pwszURLReference: std::ptr::null(),
+    pwszURLReference: PWSTR::null(),
     // Offline-first: do not allow URL retrieval during signature verification.
     dwProvFlags: WTD_CACHE_ONLY_URL_RETRIEVAL,
-    dwUIContext: 0,
+    dwUIContext: WINTRUST_DATA_UICONTEXT(0),
+    pSignatureSettings: std::ptr::null_mut(),
   };
 
   let mut action: GUID = WINTRUST_ACTION_GENERIC_VERIFY_V2;

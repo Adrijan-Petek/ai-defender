@@ -40,7 +40,7 @@ pub const R005: RuleMeta = RuleMeta {
   default_severity: Severity::Yellow,
 };
 
-pub fn file_access_rule_findings(
+pub(crate) fn file_access_rule_findings(
   cfg: &Config,
   pid: u32,
   image_path: &str,
@@ -99,4 +99,3 @@ fn cap_for_learning(cfg: &Config, sev: Severity) -> Severity {
     sev
   }
 }
-

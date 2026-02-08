@@ -2,7 +2,7 @@ use crate::config::Config;
 
 use super::engine::ProtectedTarget;
 
-pub fn classify_protected_target(cfg: &Config, file_path: &str) -> Option<ProtectedTarget> {
+pub(crate) fn classify_protected_target(cfg: &Config, file_path: &str) -> Option<ProtectedTarget> {
   let p = file_path.to_ascii_lowercase();
 
   let local = std::env::var("LOCALAPPDATA")

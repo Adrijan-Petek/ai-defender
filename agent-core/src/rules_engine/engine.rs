@@ -1,5 +1,5 @@
 use crate::config::{AllowlistConfig, Config};
-use crate::types::{Evidence, Event, FileAccessType, Finding, Incident, Severity};
+use crate::types::{Evidence, Event, Finding, Incident, Severity};
 use super::protected_paths;
 use std::collections::{HashMap, VecDeque};
 
@@ -340,6 +340,7 @@ fn is_browser_self_access(image_path: &str, _target: ProtectedTarget) -> bool {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::types::FileAccessType;
 
   fn cfg() -> Config {
     std::env::set_var("LOCALAPPDATA", "C:\\Users\\Me\\AppData\\Local");

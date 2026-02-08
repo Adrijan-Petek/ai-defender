@@ -78,7 +78,7 @@ pub fn reconcile_on_startup(cfg: &Config) -> anyhow::Result<()> {
 
   let base = paths::base_dir()?;
   let state_path = paths::killswitch_state_path(&base);
-  let mut state = load_state_or_default(&state_path);
+  let state = load_state_or_default(&state_path);
   let (rules_present, backend) = match firewall::rules_status() {
     Ok(s) => (s.outbound_ok && s.inbound_ok, Some(s.backend)),
     Err(e) => {
