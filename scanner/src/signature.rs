@@ -49,7 +49,8 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
   use std::ffi::OsStr;
   use std::os::windows::ffi::OsStrExt;
   use windows::core::GUID;
-  use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, HWND, PWSTR};
+  use windows::core::PWSTR;
+  use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, HWND};
   use windows::Win32::Security::WinTrust::{
     WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0,
     WINTRUST_FILE_INFO,
