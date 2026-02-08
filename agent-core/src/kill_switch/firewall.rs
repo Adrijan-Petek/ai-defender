@@ -190,7 +190,9 @@ mod com {
         let rule: INetFwRule =
           unsafe { CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER) }?;
         apply_rule_properties(&rule, name, direction)?;
-        rules.Add(&rule)?;
+        unsafe {
+          rules.Add(&rule)?;
+        }
         Ok(())
       }
     }
