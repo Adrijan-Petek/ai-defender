@@ -1,5 +1,8 @@
 # AI Defender
-![AI Defender logo](assets/ai-defender.png)
+
+<p align="center">
+  <img src="assets/ai-defender.png" alt="AI Defender logo" width="120" />
+</p>
 
 Behavior-based Windows security (early-stage, learning mode by default)
 
@@ -11,7 +14,7 @@ AI Defender is an **endpoint security engine** for Windows, focused on **behavio
 - wallet drains
 - automation-based malware
 
-AI Defender does **not** “detect AI”. It detects **behavior chains** (for example: sensitive access → outbound connection) that theft-focused malware cannot avoid.
+AI Defender does **not** "detect AI". It detects **behavior chains** (for example: sensitive access -> outbound connection) that theft-focused malware cannot avoid.
 
 ## What it currently does
 
@@ -29,8 +32,8 @@ AI Defender does **not** “detect AI”. It detects **behavior chains** (for ex
 - No silent blocking by default (Learning mode is monitoring-only).
 - No cloud dependency required for core functionality.
 - No telemetry without explicit consent.
-- No guaranteed “complete protection”.
-- No “AI detection” claims or AI spying.
+- No guaranteed "complete protection".
+- No "AI detection" claims or AI spying.
 
 ## Learning mode vs strict mode
 
@@ -134,4 +137,3 @@ Contributions are welcome, especially around safety, auditability, and false-pos
 AI Defender is security software in active development. Use at your own risk.
 
 It is not a replacement for a mature enterprise EDR product (yet).
-
