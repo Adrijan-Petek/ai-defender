@@ -9,6 +9,7 @@ internal static class IconFactory
   {
     None = 0,
     Green,
+    Blue,
     Yellow,
     Red,
     Gray
@@ -56,7 +57,15 @@ internal static class IconFactory
 
     using var stream = asm.GetManifestResourceStream(name)!;
     using var original = new Bitmap(stream);
-    var scaled = new Bitmap(original, new Size(size, size));
+    var scaled = new Bitmap(size, size);
+    using (var g0 = Graphics.FromImage(scaled))
+    {
+      g0.Clear(Color.Transparent);
+      g0.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+      g0.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+      g0.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+      g0.DrawImage(original, new Rectangle(0, 0, size, size));
+    }
     if (badge == Badge.None)
     {
       return scaled;
@@ -68,6 +77,7 @@ internal static class IconFactory
     var color = badge switch
     {
       Badge.Green => Color.FromArgb(0x23, 0xC5, 0x5E),
+      Badge.Blue => Color.FromArgb(0x2B, 0x6C, 0xF6),
       Badge.Yellow => Color.FromArgb(0xF5, 0xC5, 0x18),
       Badge.Red => Color.FromArgb(0xE5, 0x3E, 0x3E),
       _ => Color.FromArgb(0x9A, 0x9A, 0x9A)

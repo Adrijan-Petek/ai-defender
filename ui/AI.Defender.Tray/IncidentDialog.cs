@@ -62,13 +62,32 @@ internal sealed class IncidentDialog : Form
     var rules = s.RuleIds.Count == 0 ? "(none)" : string.Join(", ", s.RuleIds);
     var actions = s.ActionsTaken.Count == 0 ? "(none)" : string.Join(", ", s.ActionsTaken);
 
+    var ts = TryFormatLocalTime(s.CreatedAtUnixMs);
+    var timestamp = ts is null ? $"unix_ms={s.CreatedAtUnixMs}" : ts;
+
     return
       $"Incident ID: {s.IncidentId}\r\n" +
       $"Severity: {s.Severity}\r\n" +
-      $"Created (unix ms): {s.CreatedAtUnixMs}\r\n" +
+      $"Timestamp: {timestamp}\r\n" +
       $"Rules triggered: {rules}\r\n" +
       $"Actions taken: {actions}\r\n\r\n" +
       "Note: AI Defender never displays file contents, clipboard contents, or secrets.";
   }
-}
 
+  private static string? TryFormatLocalTime(ulong unixMs)
+  {
+    try
+    {
+      if (unixMs == 0 || unixMs > long.MaxValue)
+      {
+        return null;
+      }
+      var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)unixMs).ToLocalTime();
+      return dto.ToString("yyyy-MM-dd HH:mm:ss zzz");
+    }
+    catch
+    {
+      return null;
+    }
+  }
+}

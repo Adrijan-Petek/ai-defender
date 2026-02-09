@@ -25,6 +25,8 @@ internal static class AgentCli
     return null;
   }
 
+  public static bool IsAvailable() => FindAgentExe() is not null;
+
   public static AgentCliResult Run(params string[] args)
   {
     var exe = FindAgentExe();
