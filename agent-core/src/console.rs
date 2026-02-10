@@ -564,7 +564,7 @@ fn print_status(st: &kill_switch::KillSwitchStatus) {
     let now = now_unix_ms();
     if deadline > now {
       let remaining_ms = deadline - now;
-      let remaining_min = (remaining_ms + 59_999) / 60_000;
+      let remaining_min = remaining_ms.div_ceil(60_000);
       println!("Failsafe: auto-restore in ~{remaining_min} minute(s) (AUTO mode only).");
     } else {
       println!("Failsafe: deadline passed (reconcile will restore on startup if still locked).");

@@ -20,7 +20,7 @@ pub enum KillSwitchMode {
   AutoRedOnly,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct KillSwitchState {
   #[serde(default)]
   enabled: bool,
@@ -39,19 +39,6 @@ struct KillSwitchState {
 
   #[serde(default)]
   last_incident_id: Option<String>,
-}
-
-impl Default for KillSwitchState {
-  fn default() -> Self {
-    Self {
-      enabled: false,
-      keep_locked: false,
-      enabled_mode: None,
-      enabled_at_unix_ms: None,
-      failsafe_deadline_unix_ms: None,
-      last_incident_id: None,
-    }
-  }
 }
 
 #[derive(Debug, Clone)]

@@ -173,7 +173,7 @@ mod com {
       Ok(rule) => {
         // Ownership check: never modify a rule not in our group.
         let grouping = unsafe { rule.Grouping()? };
-        if grouping.to_string() != FIREWALL_RULE_GROUP {
+        if grouping != FIREWALL_RULE_GROUP {
           return Err(windows::core::Error::new(
             E_ACCESSDENIED,
             "rule name collision (not in AI_DEFENDER_KILLSWITCH group)",
@@ -210,8 +210,8 @@ mod com {
       rule.SetEnabled(VARIANT_TRUE)?;
       rule.SetAction(NET_FW_ACTION_BLOCK)?;
       rule.SetDirection(direction)?;
-      rule.SetProfiles(NET_FW_PROFILE2_ALL.0 as i32)?;
-      rule.SetProtocol(NET_FW_IP_PROTOCOL_ANY.0 as i32)?;
+      rule.SetProfiles(NET_FW_PROFILE2_ALL.0)?;
+      rule.SetProtocol(NET_FW_IP_PROTOCOL_ANY.0)?;
       rule.SetLocalAddresses(&BSTR::from("*"))?;
       rule.SetRemoteAddresses(&BSTR::from("*"))?;
       rule.SetDescription(&BSTR::from(
@@ -236,7 +236,7 @@ mod com {
       }
     };
     let grouping = unsafe { rule.Grouping()? };
-    Ok(grouping.to_string() == FIREWALL_RULE_GROUP)
+    Ok(grouping == FIREWALL_RULE_GROUP)
   }
 
   fn remove_rule_if_ours(
@@ -255,7 +255,7 @@ mod com {
     };
 
     let grouping = unsafe { rule.Grouping()? };
-    if grouping.to_string() != FIREWALL_RULE_GROUP {
+    if grouping != FIREWALL_RULE_GROUP {
       // Not ours; do not delete.
       return Ok(());
     }
