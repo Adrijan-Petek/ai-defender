@@ -90,21 +90,50 @@ mod tests {
 
   #[test]
   fn classify_chrome_login_data() {
-    std::env::set_var("LOCALAPPDATA", "C:\\Users\\Me\\AppData\\Local");
-    std::env::set_var("APPDATA", "C:\\Users\\Me\\AppData\\Roaming");
     let cfg = crate::config::Config::default();
-    let p = "C:\\Users\\Me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data";
+    // Use env-var fallbacks for determinism in parallel test runs.
+    let p = "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data";
     let t = classify_protected_target(&cfg, p);
     assert!(matches!(t, Some(ProtectedTarget::ChromeLoginData)));
   }
 
   #[test]
   fn classify_firefox_key4() {
-    std::env::set_var("LOCALAPPDATA", "C:\\Users\\Me\\AppData\\Local");
-    std::env::set_var("APPDATA", "C:\\Users\\Me\\AppData\\Roaming");
     let cfg = crate::config::Config::default();
-    let p = "C:\\Users\\Me\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\key4.db";
+    let p = "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\key4.db";
     let t = classify_protected_target(&cfg, p);
     assert!(matches!(t, Some(ProtectedTarget::FirefoxKey4Db)));
+  }
+
+  #[test]
+  fn classify_edge_cookies() {
+    let cfg = crate::config::Config::default();
+    let p = "C:\\Users\\User\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cookies";
+    let t = classify_protected_target(&cfg, p);
+    assert!(matches!(t, Some(ProtectedTarget::ChromeCookies)));
+  }
+
+  #[test]
+  fn classify_brave_local_state() {
+    let cfg = crate::config::Config::default();
+    let p = "C:\\Users\\User\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Local State";
+    let t = classify_protected_target(&cfg, p);
+    assert!(matches!(t, Some(ProtectedTarget::ChromeLocalState)));
+  }
+
+  #[test]
+  fn classify_firefox_logins_json() {
+    let cfg = crate::config::Config::default();
+    let p = "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\logins.json";
+    let t = classify_protected_target(&cfg, p);
+    assert!(matches!(t, Some(ProtectedTarget::FirefoxLoginsJson)));
+  }
+
+  #[test]
+  fn classify_firefox_cookies_sqlite() {
+    let cfg = crate::config::Config::default();
+    let p = "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\cookies.sqlite";
+    let t = classify_protected_target(&cfg, p);
+    assert!(matches!(t, Some(ProtectedTarget::FirefoxCookiesSqlite)));
   }
 }

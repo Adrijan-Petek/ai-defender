@@ -137,3 +137,42 @@ pub fn on_red_incident(cfg: &Config, incident: &mut Incident) -> anyhow::Result<
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::config::{KillSwitchConfig, Mode};
+  use crate::types::{Finding, Severity};
+
+  #[test]
+  fn learning_mode_skips_killswitch_auto_response() {
+    let cfg = Config {
+      mode: Mode::Learning,
+      killswitch: KillSwitchConfig {
+        enabled: true,
+        auto_trigger: true,
+        failsafe_minutes: 10,
+      },
+      ..Config::default()
+    };
+
+    let mut inc = Incident::new(vec![Finding {
+      rule_id: "R009".to_string(),
+      severity: Severity::Red,
+      description: "test".to_string(),
+      evidence: vec![],
+      timestamp_unix_ms: 1_700_000_000_000,
+    }]);
+
+    on_red_incident(&cfg, &mut inc).unwrap();
+
+    assert!(inc
+      .actions_taken
+      .iter()
+      .any(|a| a == "killswitch_skipped_learning_mode"));
+    assert!(!inc
+      .actions_taken
+      .iter()
+      .any(|a| a == "killswitch_enable_auto"));
+  }
+}

@@ -99,3 +99,23 @@ fn cap_for_learning(cfg: &Config, sev: Severity) -> Severity {
     sev
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn learning_mode_caps_severity_to_yellow() {
+    let mut cfg = Config::default();
+    cfg.mode = Mode::Learning;
+    assert_eq!(cap_for_learning(&cfg, Severity::Red), Severity::Yellow);
+    assert_eq!(cap_for_learning(&cfg, Severity::Yellow), Severity::Yellow);
+  }
+
+  #[test]
+  fn strict_mode_does_not_cap_severity() {
+    let mut cfg = Config::default();
+    cfg.mode = Mode::Strict;
+    assert_eq!(cap_for_learning(&cfg, Severity::Red), Severity::Red);
+  }
+}

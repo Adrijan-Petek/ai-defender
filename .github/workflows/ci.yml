@@ -13,6 +13,16 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust fmt (check)
+        # Formatting is platform-independent; run it early for fast feedback.
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy (deny warnings)
+        # Run on Windows to avoid Windows-only cfg limitations in v1.
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Build agent-core
         run: cargo build -p agent-core --verbose

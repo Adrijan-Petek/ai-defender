@@ -343,8 +343,6 @@ mod tests {
   use crate::types::FileAccessType;
 
   fn cfg() -> Config {
-    std::env::set_var("LOCALAPPDATA", "C:\\Users\\Me\\AppData\\Local");
-    std::env::set_var("APPDATA", "C:\\Users\\Me\\AppData\\Roaming");
     Config::default()
   }
 
@@ -356,7 +354,7 @@ mod tests {
     let base = 1_700_000_000_000u64;
 
     let file_path =
-      "C:\\Users\\Me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data".to_string();
+      "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data".to_string();
 
     let events = vec![
       Event::ProcessStart {
@@ -397,7 +395,7 @@ mod tests {
     let pid = 1234;
     let base = 1_700_000_000_000u64;
     let file_path =
-      "C:\\Users\\Me\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data".to_string();
+      "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data".to_string();
 
     let events = vec![
       Event::ProcessStart {
@@ -427,5 +425,89 @@ mod tests {
 
     let incidents = eng.process(&cfg, &events).unwrap();
     assert!(!incidents.iter().any(|i| i.findings.iter().any(|f| f.rule_id == "R009")));
+  }
+
+  #[test]
+  fn browser_self_access_produces_no_incident() {
+    let cfg = cfg();
+    let mut eng = Engine::new();
+    let pid = 2001;
+    let base = 1_700_000_000_000u64;
+
+    let file_path =
+      "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data".to_string();
+
+    let events = vec![
+      Event::ProcessStart {
+        pid,
+        ppid: 0,
+        image_path: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe".to_string(),
+        signer_publisher: Some("Google LLC".to_string()),
+        timestamp_unix_ms: base,
+      },
+      Event::FileAccess {
+        pid,
+        image_path: Some("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe".to_string()),
+        file_path,
+        access: FileAccessType::Read,
+        timestamp_unix_ms: base + 1_000,
+      },
+      Event::NetConnect {
+        pid,
+        image_path: Some("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe".to_string()),
+        dest_ip: "1.2.3.4".to_string(),
+        dest_port: 443,
+        dest_host: Some("example.com".to_string()),
+        protocol: "tcp".to_string(),
+        timestamp_unix_ms: base + 2_000,
+      },
+    ];
+
+    let incidents = eng.process(&cfg, &events).unwrap();
+    assert!(incidents.is_empty());
+  }
+
+  #[test]
+  fn allowlisted_publisher_suppresses_findings() {
+    let cfg = cfg();
+    let mut eng = Engine::new();
+    let pid = 3001;
+    let base = 1_700_000_000_000u64;
+
+    let file_path =
+      "C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Cookies".to_string();
+
+    let events = vec![
+      Event::ProcessStart {
+        pid,
+        ppid: 0,
+        image_path: "C:\\Temp\\backup-tool.exe".to_string(),
+        signer_publisher: Some("  gOoGlE llC  ".to_string()),
+        timestamp_unix_ms: base,
+      },
+      Event::FileAccess {
+        pid,
+        image_path: Some("C:\\Temp\\backup-tool.exe".to_string()),
+        file_path,
+        access: FileAccessType::Read,
+        timestamp_unix_ms: base + 1_000,
+      },
+    ];
+
+    let incidents = eng.process(&cfg, &events).unwrap();
+    assert!(incidents.is_empty());
+  }
+
+  #[test]
+  fn publisher_allowlist_normalizes_case_and_whitespace() {
+    let a = AllowlistConfig {
+      publishers: vec!["Google LLC".to_string()],
+      paths_allowlist: vec![],
+    };
+
+    assert!(publisher_allowlisted(&a, Some("google llc")));
+    assert!(publisher_allowlisted(&a, Some("  GoOgLe LLC  ")));
+    assert!(!publisher_allowlisted(&a, Some("Mozilla Corporation")));
+    assert!(!publisher_allowlisted(&a, None));
   }
 }
