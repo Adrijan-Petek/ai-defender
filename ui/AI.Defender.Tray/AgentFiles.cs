@@ -7,7 +7,8 @@ internal static class AgentFiles
 
   public static string ConfigPath => Path.Combine(BaseDir, "config.toml");
   public static string KillSwitchStatePath => Path.Combine(BaseDir, "killswitch-state.toml");
-  public static string LicenseStatePath => Path.Combine(BaseDir, "license-state.toml");
+  public static string LicenseStatePath => Path.Combine(BaseDir, "license", "status.toml");
+  public static string LegacyLicenseStatePath => Path.Combine(BaseDir, "license-state.toml");
   public static string LogsDir => Path.Combine(BaseDir, "logs");
   public static string IncidentsDir => Path.Combine(BaseDir, "incidents");
   public static string ThreatFeedDir => Path.Combine(BaseDir, "threat-feed");
@@ -69,11 +70,12 @@ internal static class AgentFiles
   {
     try
     {
-      if (!File.Exists(LicenseStatePath))
+      var p = File.Exists(LicenseStatePath) ? LicenseStatePath : LegacyLicenseStatePath;
+      if (!File.Exists(p))
       {
         return null;
       }
-      var text = File.ReadAllText(LicenseStatePath);
+      var text = File.ReadAllText(p);
       return TomlMini.ParseLicenseState(text);
     }
     catch

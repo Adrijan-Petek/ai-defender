@@ -83,6 +83,10 @@ internal sealed class StatusDialog : Form
         ? $"License: Pro  (plan={lic.Plan ?? "unknown"})"
         : "License: Community";
 
+    var licExpiry = lic?.ExpiresAtUnixMs is null
+      ? null
+      : $"License expiry: {TryFormatLocalTime(lic.ExpiresAtUnixMs.Value) ?? $"unix_ms={lic.ExpiresAtUnixMs.Value}"}";
+
     var feed = AgentFiles.TryReadThreatFeedState();
     var feedLine = feed is null
       ? "Threat feed: (unknown)"
@@ -105,6 +109,11 @@ internal sealed class StatusDialog : Form
       $"Last incident: {last}",
       versionLine,
     };
+
+    if (licExpiry is not null)
+    {
+      lines.Add(licExpiry);
+    }
 
     if (feed?.InstalledAtUnixMs is not null)
     {

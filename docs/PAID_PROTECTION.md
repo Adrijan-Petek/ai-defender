@@ -32,7 +32,8 @@ Paid protection does not change AI Defender into spyware and does not introduce 
 
 AI Defender supports a local license file stored at:
 
-`C:\ProgramData\AI Defender\license.toml`
+`C:\ProgramData\AI Defender\license\license.json`
+`C:\ProgramData\AI Defender\license\license.sig`
 
 The license format is a signed token:
 
@@ -40,18 +41,20 @@ The license format is a signed token:
 - Verified locally using an embedded public key
 - No secrets are embedded in the code
 
-Token shape (example):
+The signature is computed over the exact bytes of `license.json`. The agent validates it offline using an embedded public key.
 
-- `payload_b64url.signature_b64url`
-
-Where the decoded JSON payload contains conservative fields such as:
+The JSON payload contains conservative fields such as:
 
 ```json
 {
   "license_id": "LIC-EXAMPLE-001",
   "plan": "pro",
-  "issued_at_unix_ms": 1700000000000,
-  "expires_at_unix_ms": 1730000000000
+  "issued_at": 1700000000,
+  "expires_at": 1730000000,
+  "seats": 2,
+  "features": ["threat_feed", "priority_updates"],
+  "issuer": "AI Defender License Authority",
+  "user_id": "opaque"
 }
 ```
 

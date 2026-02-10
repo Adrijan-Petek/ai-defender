@@ -48,7 +48,9 @@ agent-core.exe --console --killswitch status
 
 # License (local, offline)
 agent-core.exe --console --license status
-agent-core.exe --console --license install C:\Path\to\license.toml
+agent-core.exe --console --license install C:\Path\to\license.json C:\Path\to\license.sig
+agent-core.exe --console --license activate
+agent-core.exe --console --license deactivate
 
 # Threat feed (offline import, no auto-download)
 agent-core.exe --console --feed status

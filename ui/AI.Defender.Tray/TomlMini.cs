@@ -113,10 +113,12 @@ internal static class TomlMini
   public static LicenseState ParseLicenseState(string text)
   {
     bool pro = false;
+    string? state = null;
     string? licenseId = null;
     string? plan = null;
     ulong? expiresAt = null;
     ulong checkedAt = 0;
+    ulong? lastVerifiedAt = null;
     string? reason = null;
 
     foreach (var line in Lines(text))
@@ -128,6 +130,9 @@ internal static class TomlMini
 
       switch (key)
       {
+        case "state":
+          state = ParseNullableString(value);
+          break;
         case "pro":
           pro = ParseBool(value);
           break;
@@ -140,13 +145,35 @@ internal static class TomlMini
         case "expires_at_unix_ms":
           expiresAt = ParseNullableU64(value);
           break;
+        case "expires_at_unix_seconds":
+          {
+            var s = ParseNullableU64(value);
+            expiresAt = s is null ? null : s.Value * 1000;
+            break;
+          }
         case "checked_at_unix_ms":
           checkedAt = ParseU64(value);
           break;
+        case "checked_at_unix_seconds":
+          checkedAt = ParseU64(value) * 1000;
+          break;
+        case "last_verified_at_unix_seconds":
+          {
+            var s = ParseNullableU64(value);
+            lastVerifiedAt = s is null ? null : s.Value * 1000;
+            break;
+          }
         case "reason":
           reason = ParseNullableString(value);
           break;
       }
+    }
+
+    if (state is not null)
+    {
+      pro = state.Equals("pro_active", StringComparison.OrdinalIgnoreCase)
+            || state.Equals("pro_expired", StringComparison.OrdinalIgnoreCase)
+            || state.Equals("pro_invalid", StringComparison.OrdinalIgnoreCase);
     }
 
     return new LicenseState(pro, licenseId, plan, expiresAt, checkedAt, reason);

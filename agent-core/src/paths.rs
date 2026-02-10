@@ -25,12 +25,28 @@ pub fn sysmon_bookmark_path(base: &Path) -> PathBuf {
   base.join("sysmon-bookmark.toml")
 }
 
-pub fn license_path(base: &Path) -> PathBuf {
-  base.join("license.toml")
+pub fn device_id_path(base: &Path) -> PathBuf {
+  base.join("device_id.txt")
 }
 
-pub fn license_state_path(base: &Path) -> PathBuf {
-  base.join("license-state.toml")
+pub fn license_dir(base: &Path) -> PathBuf {
+  base.join("license")
+}
+
+pub fn license_json_path(base: &Path) -> PathBuf {
+  license_dir(base).join("license.json")
+}
+
+pub fn license_sig_path(base: &Path) -> PathBuf {
+  license_dir(base).join("license.sig")
+}
+
+pub fn license_activation_path(base: &Path) -> PathBuf {
+  license_dir(base).join("activation.json")
+}
+
+pub fn license_status_path(base: &Path) -> PathBuf {
+  license_dir(base).join("status.toml")
 }
 
 pub fn threat_feed_dir(base: &Path) -> PathBuf {

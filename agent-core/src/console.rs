@@ -105,38 +105,77 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
   match sub {
     "status" => {
       let st = license::status(&base);
-      if st.pro {
-        println!("License: PRO");
-        if let Some(id) = st.license_id {
-          println!("License ID: {id}");
+      println!(
+        "License: {}",
+        match st.state {
+          license::LicenseState::Community => "Community",
+          license::LicenseState::ProActive => "Pro (active)",
+          license::LicenseState::ProExpired => "Pro (expired)",
+          license::LicenseState::ProInvalid => "Pro (invalid or not activated)",
         }
-        if let Some(plan) = st.plan {
-          println!("Plan: {plan}");
-        }
-        if let Some(exp) = st.expires_at_unix_ms {
-          println!("Expires (unix ms): {exp}");
-        } else {
-          println!("Expires: none");
-        }
-      } else {
-        println!("License: COMMUNITY");
-        if let Some(r) = st.reason {
-          println!("Reason: {r}");
-        }
+      );
+
+      if let Some(id) = st.license_id.as_deref() {
+        println!("License ID: {id}");
+      }
+      if let Some(plan) = st.plan.as_deref() {
+        println!("Plan: {plan}");
+      }
+      if let Some(seats) = st.seats {
+        println!("Seats: {seats} (server activation planned; offline mode is local-only)");
+      }
+      match st.expires_at_unix_seconds {
+        Some(exp) => println!("Expires (unix seconds): {exp}"),
+        None => println!("Expires: none"),
+      }
+      if let Some(ts) = st.last_verified_at_unix_seconds {
+        println!("Last verified (unix seconds): {ts}");
+      }
+      println!("Checked at (unix seconds): {}", st.checked_at_unix_seconds);
+      if let Some(r) = st.reason.as_deref() {
+        println!("Note: {r}");
       }
       Ok(ConsoleAction::ExitOk)
     }
     "install" => {
-      let p = tail.get(1).map(|s| s.as_str()).unwrap_or("");
-      if p.is_empty() {
-        anyhow::bail!("expected: --license install <path-to-license-file>");
+      let json = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      let sig = tail.get(2).map(|s| s.as_str()).unwrap_or("");
+      if json.is_empty() || sig.is_empty() {
+        anyhow::bail!("expected: --license install <path-to-license.json> <path-to-license.sig>");
       }
-      let st = license::install(&base, std::path::Path::new(p))?;
-      println!("Installed license. Mode: {}", if st.pro { "PRO" } else { "COMMUNITY" });
+      let st =
+        license::install_license(&base, std::path::Path::new(json), std::path::Path::new(sig))?;
+      println!(
+        "Installed license. Status: {}",
+        match st.state {
+          license::LicenseState::Community => "Community",
+          license::LicenseState::ProActive => "Pro (active)",
+          license::LicenseState::ProExpired => "Pro (expired)",
+          license::LicenseState::ProInvalid => "Pro (not activated)",
+        }
+      );
+      Ok(ConsoleAction::ExitOk)
+    }
+    "activate" => {
+      let st = license::activate(&base)?;
+      println!(
+        "Activation complete. Status: {}",
+        match st.state {
+          license::LicenseState::Community => "Community",
+          license::LicenseState::ProActive => "Pro (active)",
+          license::LicenseState::ProExpired => "Pro (expired)",
+          license::LicenseState::ProInvalid => "Pro (invalid)",
+        }
+      );
+      Ok(ConsoleAction::ExitOk)
+    }
+    "deactivate" => {
+      license::deactivate(&base)?;
+      println!("Deactivated this device (activation removed).");
       Ok(ConsoleAction::ExitOk)
     }
     _ => {
-      eprintln!("Unknown `--license` subcommand. Expected: status|install <path>");
+      eprintln!("Unknown `--license` subcommand. Expected: status|install <json> <sig>|activate|deactivate");
       print_help();
       Ok(ConsoleAction::ExitOk)
     }
@@ -468,7 +507,9 @@ fn print_help() {
   println!("  --killswitch status");
   println!("  --killswitch keep-locked true|false");
   println!("  --license status");
-  println!("  --license install <path-to-license-file>");
+  println!("  --license install <path-to-license.json> <path-to-license.sig>");
+  println!("  --license activate");
+  println!("  --license deactivate");
   println!("  --feed status");
   println!("  --feed import <path-to-bundle-or-directory>");
   println!("  --feed verify <path-to-bundle> <path-to-sig>");
