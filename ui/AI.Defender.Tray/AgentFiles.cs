@@ -7,8 +7,11 @@ internal static class AgentFiles
 
   public static string ConfigPath => Path.Combine(BaseDir, "config.toml");
   public static string KillSwitchStatePath => Path.Combine(BaseDir, "killswitch-state.toml");
+  public static string LicenseStatePath => Path.Combine(BaseDir, "license-state.toml");
   public static string LogsDir => Path.Combine(BaseDir, "logs");
   public static string IncidentsDir => Path.Combine(BaseDir, "incidents");
+  public static string ThreatFeedDir => Path.Combine(BaseDir, "threat-feed");
+  public static string ThreatFeedStatePath => Path.Combine(ThreatFeedDir, "state.toml");
 
   public static AgentConfig? TryReadConfig()
   {
@@ -55,6 +58,40 @@ internal static class AgentFiles
       }
       var text = File.ReadAllText(KillSwitchStatePath);
       return TomlMini.ParseKillSwitchState(text);
+    }
+    catch
+    {
+      return null;
+    }
+  }
+
+  public static LicenseState? TryReadLicenseState()
+  {
+    try
+    {
+      if (!File.Exists(LicenseStatePath))
+      {
+        return null;
+      }
+      var text = File.ReadAllText(LicenseStatePath);
+      return TomlMini.ParseLicenseState(text);
+    }
+    catch
+    {
+      return null;
+    }
+  }
+
+  public static ThreatFeedState? TryReadThreatFeedState()
+  {
+    try
+    {
+      if (!File.Exists(ThreatFeedStatePath))
+      {
+        return null;
+      }
+      var text = File.ReadAllText(ThreatFeedStatePath);
+      return TomlMini.ParseThreatFeedState(text);
     }
     catch
     {
@@ -114,3 +151,19 @@ internal sealed record IncidentSummary(
   ulong CreatedAtUnixMs,
   IReadOnlyList<string> RuleIds,
   IReadOnlyList<string> ActionsTaken);
+
+internal sealed record LicenseState(
+  bool Pro,
+  string? LicenseId,
+  string? Plan,
+  ulong? ExpiresAtUnixMs,
+  ulong CheckedAtUnixMs,
+  string? Reason);
+
+internal sealed record ThreatFeedState(
+  bool Installed,
+  bool Verified,
+  ulong? Version,
+  ulong? InstalledAtUnixMs,
+  ulong CheckedAtUnixMs,
+  string? Reason);

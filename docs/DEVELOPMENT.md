@@ -46,6 +46,15 @@ agent-core.exe --console --killswitch on
 agent-core.exe --console --killswitch off
 agent-core.exe --console --killswitch status
 
+# License (local, offline)
+agent-core.exe --console --license status
+agent-core.exe --console --license install C:\Path\to\license.toml
+
+# Threat feed (offline import, no auto-download)
+agent-core.exe --console --feed status
+agent-core.exe --console --feed verify C:\Path\to\bundle.json C:\Path\to\bundle.sig
+agent-core.exe --console --feed import C:\Path\to\bundle.json
+
 # Incident listing (text)
 agent-core.exe --console --incidents list --limit 10
 ```
@@ -83,4 +92,3 @@ Notes:
 - Check `C:\ProgramData\AI Defender\logs\` for agent logs.
 - If networking is locked, follow `docs/RECOVERY.md` and disable the kill switch.
 - If rules do not load in strict mode, the agent may refuse strict mode when no active rules are available.
-

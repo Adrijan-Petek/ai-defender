@@ -76,6 +76,20 @@ internal sealed class StatusDialog : Form
       ? "None"
       : FormatIncidentOneLine(s.LastIncidentSummary);
 
+    var lic = AgentFiles.TryReadLicenseState();
+    var licLine = lic is null
+      ? "License: (unknown)"
+      : lic.Pro
+        ? $"License: Pro  (plan={lic.Plan ?? "unknown"})"
+        : "License: Community";
+
+    var feed = AgentFiles.TryReadThreatFeedState();
+    var feedLine = feed is null
+      ? "Threat feed: (unknown)"
+      : !feed.Installed
+        ? "Threat feed: not installed"
+        : $"Threat feed: v{feed.Version?.ToString() ?? "unknown"}  (verified={(feed.Verified ? "yes" : "no")})";
+
     var stateLine = ComputeStateLine(s);
 
     var serviceDetail = string.IsNullOrWhiteSpace(s.ServiceDetail) ? null : $"Service: {s.ServiceDetail}";
@@ -86,9 +100,17 @@ internal sealed class StatusDialog : Form
       $"Agent running: {(s.AgentRunning ? "Yes" : "No")}",
       $"Mode: {mode}",
       $"Kill switch: {kill}",
+      licLine,
+      feedLine,
       $"Last incident: {last}",
       versionLine,
     };
+
+    if (feed?.InstalledAtUnixMs is not null)
+    {
+      lines.Add(
+        $"Threat feed updated: {TryFormatLocalTime(feed.InstalledAtUnixMs.Value) ?? $"unix_ms={feed.InstalledAtUnixMs.Value}"}");
+    }
 
     if (serviceDetail is not null)
     {

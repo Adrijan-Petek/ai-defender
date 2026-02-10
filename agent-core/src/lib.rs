@@ -4,11 +4,13 @@ pub mod console;
 pub mod event_collector;
 pub mod incident_store;
 pub mod kill_switch;
+pub mod license;
 pub mod logging;
 pub mod paths;
 pub mod response_engine;
 pub mod rules_engine;
 pub mod service;
+pub mod threat_feed;
 pub mod types;
 
 use std::sync::mpsc;
@@ -26,6 +28,11 @@ pub fn run_console(args: &[String]) -> anyhow::Result<()> {
   )?;
 
   kill_switch::reconcile_on_startup(&cfg)?;
+
+  // Best-effort: refresh local status files for UI/CLI consumers.
+  // This must not affect enforcement behavior.
+  let _ = license::status(&base);
+  let _ = threat_feed::status(&base);
 
   match console::run_console_command(&cfg, args)? {
     console::ConsoleAction::ExitOk => return Ok(()),

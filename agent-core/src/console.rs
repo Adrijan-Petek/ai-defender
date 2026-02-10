@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::incident_store;
 use crate::kill_switch;
+use crate::{license, paths, threat_feed};
 use crate::types::{now_unix_ms, Event, FileAccessType};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -28,6 +29,14 @@ pub fn run_console_command(cfg: &Config, args: &[String]) -> anyhow::Result<Cons
 
   if let Some(i) = args.iter().position(|a| a == "--simulate") {
     return run_simulate(cfg, &args[i + 1..]);
+  }
+
+  if let Some(i) = args.iter().position(|a| a == "--license") {
+    return run_license(&args[i + 1..]);
+  }
+
+  if let Some(i) = args.iter().position(|a| a == "--feed") {
+    return run_feed(&args[i + 1..]);
   }
 
   Ok(ConsoleAction::RunAgent)
@@ -83,6 +92,111 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
     }
     _ => {
       eprintln!("Unknown `--killswitch` subcommand. Expected: on|off|status|keep-locked");
+      print_help();
+      Ok(ConsoleAction::ExitOk)
+    }
+  }
+}
+
+fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
+  let base = paths::base_dir()?;
+
+  let sub = tail.first().map(|s| s.as_str()).unwrap_or("");
+  match sub {
+    "status" => {
+      let st = license::status(&base);
+      if st.pro {
+        println!("License: PRO");
+        if let Some(id) = st.license_id {
+          println!("License ID: {id}");
+        }
+        if let Some(plan) = st.plan {
+          println!("Plan: {plan}");
+        }
+        if let Some(exp) = st.expires_at_unix_ms {
+          println!("Expires (unix ms): {exp}");
+        } else {
+          println!("Expires: none");
+        }
+      } else {
+        println!("License: COMMUNITY");
+        if let Some(r) = st.reason {
+          println!("Reason: {r}");
+        }
+      }
+      Ok(ConsoleAction::ExitOk)
+    }
+    "install" => {
+      let p = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      if p.is_empty() {
+        anyhow::bail!("expected: --license install <path-to-license-file>");
+      }
+      let st = license::install(&base, std::path::Path::new(p))?;
+      println!("Installed license. Mode: {}", if st.pro { "PRO" } else { "COMMUNITY" });
+      Ok(ConsoleAction::ExitOk)
+    }
+    _ => {
+      eprintln!("Unknown `--license` subcommand. Expected: status|install <path>");
+      print_help();
+      Ok(ConsoleAction::ExitOk)
+    }
+  }
+}
+
+fn run_feed(tail: &[String]) -> anyhow::Result<ConsoleAction> {
+  let base = paths::base_dir()?;
+
+  let sub = tail.first().map(|s| s.as_str()).unwrap_or("");
+  match sub {
+    "status" => {
+      let st = threat_feed::status(&base);
+      if !st.installed {
+        println!("Threat feed: not installed");
+        if let Some(r) = st.reason {
+          println!("Reason: {r}");
+        }
+        return Ok(ConsoleAction::ExitOk);
+      }
+
+      println!("Threat feed: installed");
+      println!("Verified: {}", st.verified);
+      if let Some(v) = st.version {
+        println!("Version: {v}");
+      }
+      if let Some(ts) = st.installed_at_unix_ms {
+        println!("Installed at (unix ms): {ts}");
+      }
+      if let Some(r) = st.reason {
+        println!("Note: {r}");
+      }
+      Ok(ConsoleAction::ExitOk)
+    }
+    "import" => {
+      let p = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      if p.is_empty() {
+        anyhow::bail!("expected: --feed import <path-to-bundle-or-directory>");
+      }
+      let st = threat_feed::import(&base, std::path::Path::new(p), None)?;
+      println!("Imported threat feed bundle.");
+      if let Some(v) = st.version {
+        println!("Version: {v}");
+      }
+      Ok(ConsoleAction::ExitOk)
+    }
+    "verify" => {
+      let b = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      let s = tail.get(2).map(|s| s.as_str()).unwrap_or("");
+      if b.is_empty() || s.is_empty() {
+        anyhow::bail!("expected: --feed verify <path-to-bundle> <path-to-sig>");
+      }
+      let bundle = threat_feed::verify_files(std::path::Path::new(b), std::path::Path::new(s))?;
+      println!("Threat feed bundle verified.");
+      println!("Version: {}", bundle.version);
+      println!("Created at (unix ms): {}", bundle.created_at_unix_ms);
+      Ok(ConsoleAction::ExitOk)
+    }
+    _ => {
+      eprintln!("Unknown `--feed` subcommand. Expected: status|import <path>|verify <bundle> <sig>");
       print_help();
       Ok(ConsoleAction::ExitOk)
     }
@@ -353,6 +467,11 @@ fn print_help() {
   println!("  --killswitch off");
   println!("  --killswitch status");
   println!("  --killswitch keep-locked true|false");
+  println!("  --license status");
+  println!("  --license install <path-to-license-file>");
+  println!("  --feed status");
+  println!("  --feed import <path-to-bundle-or-directory>");
+  println!("  --feed verify <path-to-bundle> <path-to-sig>");
   println!("  --simulate red");
   println!("  --simulate file-access-chrome");
   println!("  --simulate net-connect");

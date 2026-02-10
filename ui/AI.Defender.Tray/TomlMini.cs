@@ -110,6 +110,90 @@ internal static class TomlMini
     return new KillSwitchState(enabled, keepLocked, enabledMode, enabledAt, deadline, lastIncident);
   }
 
+  public static LicenseState ParseLicenseState(string text)
+  {
+    bool pro = false;
+    string? licenseId = null;
+    string? plan = null;
+    ulong? expiresAt = null;
+    ulong checkedAt = 0;
+    string? reason = null;
+
+    foreach (var line in Lines(text))
+    {
+      if (!TryKeyValue(line, out var key, out var value))
+      {
+        continue;
+      }
+
+      switch (key)
+      {
+        case "pro":
+          pro = ParseBool(value);
+          break;
+        case "license_id":
+          licenseId = ParseNullableString(value);
+          break;
+        case "plan":
+          plan = ParseNullableString(value);
+          break;
+        case "expires_at_unix_ms":
+          expiresAt = ParseNullableU64(value);
+          break;
+        case "checked_at_unix_ms":
+          checkedAt = ParseU64(value);
+          break;
+        case "reason":
+          reason = ParseNullableString(value);
+          break;
+      }
+    }
+
+    return new LicenseState(pro, licenseId, plan, expiresAt, checkedAt, reason);
+  }
+
+  public static ThreatFeedState ParseThreatFeedState(string text)
+  {
+    bool installed = false;
+    bool verified = false;
+    ulong? version = null;
+    ulong? installedAt = null;
+    ulong checkedAt = 0;
+    string? reason = null;
+
+    foreach (var line in Lines(text))
+    {
+      if (!TryKeyValue(line, out var key, out var value))
+      {
+        continue;
+      }
+
+      switch (key)
+      {
+        case "installed":
+          installed = ParseBool(value);
+          break;
+        case "verified":
+          verified = ParseBool(value);
+          break;
+        case "version":
+          version = ParseNullableU64(value);
+          break;
+        case "installed_at_unix_ms":
+          installedAt = ParseNullableU64(value);
+          break;
+        case "checked_at_unix_ms":
+          checkedAt = ParseU64(value);
+          break;
+        case "reason":
+          reason = ParseNullableString(value);
+          break;
+      }
+    }
+
+    return new ThreatFeedState(installed, verified, version, installedAt, checkedAt, reason);
+  }
+
   public static IncidentSummary? ParseIncidentSummary(string text)
   {
     string? incidentId = null;
@@ -243,6 +327,16 @@ internal static class TomlMini
       return x;
     }
     return null;
+  }
+
+  private static ulong ParseU64(string v)
+  {
+    var t = v.Trim();
+    if (ulong.TryParse(t, NumberStyles.Integer, CultureInfo.InvariantCulture, out var x))
+    {
+      return x;
+    }
+    return 0;
   }
 
   private static IEnumerable<string> ParseStringArray(string v)

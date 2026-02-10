@@ -24,3 +24,27 @@ pub fn incidents_dir(base: &Path) -> PathBuf {
 pub fn sysmon_bookmark_path(base: &Path) -> PathBuf {
   base.join("sysmon-bookmark.toml")
 }
+
+pub fn license_path(base: &Path) -> PathBuf {
+  base.join("license.toml")
+}
+
+pub fn license_state_path(base: &Path) -> PathBuf {
+  base.join("license-state.toml")
+}
+
+pub fn threat_feed_dir(base: &Path) -> PathBuf {
+  base.join("threat-feed")
+}
+
+pub fn threat_feed_bundle_path(base: &Path) -> PathBuf {
+  threat_feed_dir(base).join("bundle.json")
+}
+
+pub fn threat_feed_sig_path(base: &Path) -> PathBuf {
+  threat_feed_dir(base).join("bundle.sig")
+}
+
+pub fn threat_feed_state_path(base: &Path) -> PathBuf {
+  threat_feed_dir(base).join("state.toml")
+}

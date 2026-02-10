@@ -1,5 +1,5 @@
 use crate::agent::Agent;
-use crate::{config, kill_switch, logging, paths};
+use crate::{config, kill_switch, license, logging, paths, threat_feed};
 use std::sync::mpsc;
 use std::time::Duration;
 use windows_service::define_windows_service;
@@ -37,6 +37,11 @@ fn run_service_inner() -> anyhow::Result<()> {
   )?;
 
   kill_switch::reconcile_on_startup(&cfg)?;
+
+  // Best-effort: refresh local status files for UI/CLI consumers.
+  // This must not affect enforcement behavior.
+  let _ = license::status(&base);
+  let _ = threat_feed::status(&base);
 
   let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
