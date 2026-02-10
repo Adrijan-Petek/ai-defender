@@ -15,11 +15,7 @@ impl Agent {
     Self { cfg }
   }
 
-  pub fn run(
-    &self,
-    stop_rx: mpsc::Receiver<()>,
-    tick: Duration,
-  ) -> anyhow::Result<()> {
+  pub fn run(&self, stop_rx: mpsc::Receiver<()>, tick: Duration) -> anyhow::Result<()> {
     let mut cfg = self.cfg.clone();
     if cfg.mode == crate::config::Mode::Strict && rules_engine::active_rule_ids().is_empty() {
       tracing::warn!(
