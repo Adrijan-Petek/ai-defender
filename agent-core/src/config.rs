@@ -192,12 +192,7 @@ impl ConfigFile {
     let mut cfg = Config::default();
     if let Some(mode) = self.mode {
       cfg.mode = mode;
-    } else if self
-      .safety
-      .as_ref()
-      .map(|s| s.strict_mode)
-      .unwrap_or(false)
-    {
+    } else if self.safety.as_ref().map(|s| s.strict_mode).unwrap_or(false) {
       cfg.mode = Mode::Strict;
     }
 
@@ -311,10 +306,7 @@ fn write_atomic(path: &Path, contents: &str) -> anyhow::Result<()> {
     .ok_or_else(|| anyhow::anyhow!("file path has no parent: {}", path.display()))?;
   let tmp = parent.join(format!(
     ".{}.tmp",
-    path
-      .file_name()
-      .unwrap_or_default()
-      .to_string_lossy()
+    path.file_name().unwrap_or_default().to_string_lossy()
   ));
 
   fs::write(&tmp, contents)?;

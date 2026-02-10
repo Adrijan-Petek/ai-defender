@@ -102,10 +102,7 @@ pub fn reconcile_on_startup(cfg: &Config) -> anyhow::Result<()> {
         group = FIREWALL_RULE_GROUP,
         "startup reconcile: auto failsafe expired; restoring network"
       );
-      disable_with_reason(
-        "failsafe_startup",
-        state.last_incident_id.as_deref(),
-      )?;
+      disable_with_reason("failsafe_startup", state.last_incident_id.as_deref())?;
       return Ok(());
     }
 
@@ -317,10 +314,7 @@ fn write_atomic(path: &Path, contents: &str) -> anyhow::Result<()> {
     .ok_or_else(|| anyhow::anyhow!("file path has no parent: {}", path.display()))?;
   let tmp = parent.join(format!(
     ".{}.tmp",
-    path
-      .file_name()
-      .unwrap_or_default()
-      .to_string_lossy()
+    path.file_name().unwrap_or_default().to_string_lossy()
   ));
   fs::write(&tmp, contents)?;
   fs::rename(&tmp, path)?;

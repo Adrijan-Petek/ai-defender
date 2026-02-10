@@ -124,7 +124,8 @@ mod tests {
   #[test]
   fn classify_firefox_logins_json() {
     let cfg = crate::config::Config::default();
-    let p = "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\logins.json";
+    let p =
+      "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\logins.json";
     let t = classify_protected_target(&cfg, p);
     assert!(matches!(t, Some(ProtectedTarget::FirefoxLoginsJson)));
   }
@@ -132,7 +133,8 @@ mod tests {
   #[test]
   fn classify_firefox_cookies_sqlite() {
     let cfg = crate::config::Config::default();
-    let p = "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\cookies.sqlite";
+    let p =
+      "C:\\Users\\User\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\abcd.default\\cookies.sqlite";
     let t = classify_protected_target(&cfg, p);
     assert!(matches!(t, Some(ProtectedTarget::FirefoxCookiesSqlite)));
   }

@@ -69,7 +69,11 @@ pub fn run(mode: ScanMode) -> anyhow::Result<()> {
       continue;
     }
 
-    for entry in WalkDir::new(&root).follow_links(false).into_iter().flatten() {
+    for entry in WalkDir::new(&root)
+      .follow_links(false)
+      .into_iter()
+      .flatten()
+    {
       if should_cancel(&cfg) {
         println!("Scan canceled by user.");
         return Ok(());
@@ -126,7 +130,10 @@ pub fn run(mode: ScanMode) -> anyhow::Result<()> {
   let id = incident.incident_id.clone();
 
   let path = agent_core::incident_store::store_incident(&incident)?;
-  println!("Scan complete: incident_id={id} severity=yellow stored={}", path.display());
+  println!(
+    "Scan complete: incident_id={id} severity=yellow stored={}",
+    path.display()
+  );
   Ok(())
 }
 
@@ -154,7 +161,10 @@ fn parse_scan_config(args: &[String]) -> ScanConfig {
     }
     i += 1;
   }
-  ScanConfig { excludes, cancel_file }
+  ScanConfig {
+    excludes,
+    cancel_file,
+  }
 }
 
 fn should_cancel(cfg: &ScanConfig) -> bool {
@@ -166,7 +176,9 @@ fn should_cancel(cfg: &ScanConfig) -> bool {
 
 fn is_excluded(excludes: &[String], path: &Path) -> bool {
   let p = path.to_string_lossy().to_ascii_lowercase();
-  excludes.iter().any(|ex| !ex.trim().is_empty() && p.starts_with(ex))
+  excludes
+    .iter()
+    .any(|ex| !ex.trim().is_empty() && p.starts_with(ex))
 }
 
 fn quick_roots() -> Vec<PathBuf> {
@@ -181,7 +193,12 @@ fn quick_roots() -> Vec<PathBuf> {
   }
   if let Ok(appdata) = std::env::var("APPDATA") {
     roots.push(PathBuf::from(&appdata));
-    roots.push(PathBuf::from(&appdata).join("Microsoft").join("Windows").join("Start Menu"));
+    roots.push(
+      PathBuf::from(&appdata)
+        .join("Microsoft")
+        .join("Windows")
+        .join("Start Menu"),
+    );
   }
   if let Ok(local) = std::env::var("LOCALAPPDATA") {
     roots.push(PathBuf::from(&local));
@@ -216,8 +233,15 @@ fn browser_extension_roots(localappdata: &str) -> Vec<PathBuf> {
 }
 
 fn is_executable_candidate(p: &Path) -> bool {
-  let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
-  matches!(ext.as_str(), "exe" | "dll" | "sys" | "ps1" | "js" | "vbs" | "bat" | "cmd")
+  let ext = p
+    .extension()
+    .and_then(|s| s.to_str())
+    .unwrap_or("")
+    .to_ascii_lowercase();
+  matches!(
+    ext.as_str(),
+    "exe" | "dll" | "sys" | "ps1" | "js" | "vbs" | "bat" | "cmd"
+  )
 }
 
 fn safe_filename(p: &Path) -> String {

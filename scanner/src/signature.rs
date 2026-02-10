@@ -23,8 +23,8 @@ pub fn set_low_priority() -> anyhow::Result<()> {
 
 #[cfg(windows)]
 pub fn fixed_drives() -> Vec<std::path::PathBuf> {
-  use windows::Win32::Storage::FileSystem::GetDriveTypeW;
   use windows::core::PCWSTR;
+  use windows::Win32::Storage::FileSystem::GetDriveTypeW;
   let mut out = Vec::new();
   const DRIVE_FIXED_U32: u32 = 3;
   for letter in b'C'..=b'Z' {
@@ -53,9 +53,8 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
   use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE, HWND};
   use windows::Win32::Security::WinTrust::{
     WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_DATA_0,
-    WINTRUST_FILE_INFO,
-    WTD_CHOICE_FILE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY,
-    WTD_UI_NONE, WTD_CACHE_ONLY_URL_RETRIEVAL, WINTRUST_DATA_UICONTEXT,
+    WINTRUST_DATA_UICONTEXT, WINTRUST_FILE_INFO, WTD_CACHE_ONLY_URL_RETRIEVAL, WTD_CHOICE_FILE,
+    WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY, WTD_UI_NONE,
   };
 
   // SAFETY: WinVerifyTrust requires Win32 structs and pointers. We keep this isolated.
@@ -78,7 +77,9 @@ pub fn is_trusted_signed(path: &Path) -> anyhow::Result<bool> {
     dwUIChoice: WTD_UI_NONE,
     fdwRevocationChecks: WTD_REVOKE_NONE,
     dwUnionChoice: WTD_CHOICE_FILE,
-    Anonymous: WINTRUST_DATA_0 { pFile: &mut file_info },
+    Anonymous: WINTRUST_DATA_0 {
+      pFile: &mut file_info,
+    },
     dwStateAction: WTD_STATEACTION_VERIFY,
     hWVTStateData: HANDLE::default(),
     pwszURLReference: PWSTR::null(),

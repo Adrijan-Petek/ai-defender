@@ -34,11 +34,7 @@ pub fn list_recent(limit: usize) -> anyhow::Result<Vec<IncidentSummary>> {
     .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("toml"))
     .collect();
 
-  entries.sort_by_key(|e| {
-    e.metadata()
-      .and_then(|m| m.modified())
-      .ok()
-  });
+  entries.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
   entries.reverse();
 
   let mut out = Vec::new();
@@ -71,10 +67,7 @@ fn write_atomic(path: &Path, contents: &str) -> anyhow::Result<()> {
 
   let tmp = parent.join(format!(
     ".{}.tmp",
-    path
-      .file_name()
-      .unwrap_or_default()
-      .to_string_lossy()
+    path.file_name().unwrap_or_default().to_string_lossy()
   ));
   fs::write(&tmp, contents)?;
   fs::rename(&tmp, path)?;

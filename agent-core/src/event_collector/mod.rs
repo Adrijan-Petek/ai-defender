@@ -32,15 +32,19 @@ pub fn collect_once() -> anyhow::Result<Vec<Event>> {
     fs::create_dir_all(&base)?;
     let bookmark_path = paths::sysmon_bookmark_path(&base);
 
-    let m = COLLECTOR.get_or_init(|| Mutex::new(SysmonCollector {
-      last_record_id: 0,
-      warned_missing: false,
-      initialized: false,
-    }));
+    let m = COLLECTOR.get_or_init(|| {
+      Mutex::new(SysmonCollector {
+        last_record_id: 0,
+        warned_missing: false,
+        initialized: false,
+      })
+    });
 
     let mut c = m.lock().unwrap();
     if !c.initialized {
-      c.last_record_id = load_bookmark(&bookmark_path).unwrap_or_default().last_record_id;
+      c.last_record_id = load_bookmark(&bookmark_path)
+        .unwrap_or_default()
+        .last_record_id;
       c.initialized = true;
     }
 
@@ -216,7 +220,10 @@ fn parse_sysmon_xml(xml: &str, c: &mut SysmonCollector) -> anyhow::Result<Vec<Ev
 }
 
 #[cfg(windows)]
-fn normalize_sysmon(event_id: u32, data: &std::collections::HashMap<String, String>) -> Option<Event> {
+fn normalize_sysmon(
+  event_id: u32,
+  data: &std::collections::HashMap<String, String>,
+) -> Option<Event> {
   let ts = now_unix_ms();
   match event_id {
     1 => {
@@ -243,7 +250,10 @@ fn normalize_sysmon(event_id: u32, data: &std::collections::HashMap<String, Stri
         .get("DestinationPort")
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(0);
-      let protocol = data.get("Protocol").cloned().unwrap_or_else(|| "unknown".to_string());
+      let protocol = data
+        .get("Protocol")
+        .cloned()
+        .unwrap_or_else(|| "unknown".to_string());
       let host = data.get("DestinationHostname").cloned();
       Some(Event::NetConnect {
         pid,
@@ -292,10 +302,7 @@ fn write_atomic(path: &std::path::Path, contents: &str) -> anyhow::Result<()> {
 
   let tmp = parent.join(format!(
     ".{}.tmp",
-    path
-      .file_name()
-      .unwrap_or_default()
-      .to_string_lossy()
+    path.file_name().unwrap_or_default().to_string_lossy()
   ));
   fs::write(&tmp, contents)?;
   fs::rename(&tmp, path)?;

@@ -21,12 +21,7 @@ pub fn init_file_and_stderr(
   init_impl(log_dir, level, retention_days, true)
 }
 
-fn init_impl(
-  log_dir: &Path,
-  level: &str,
-  retention_days: u64,
-  stderr: bool,
-) -> anyhow::Result<()> {
+fn init_impl(log_dir: &Path, level: &str, retention_days: u64, stderr: bool) -> anyhow::Result<()> {
   fs::create_dir_all(log_dir)?;
   cleanup_old_logs(log_dir, retention_days)?;
 
@@ -54,7 +49,10 @@ fn init_impl(
       .with(stderr_layer)
       .init();
   } else {
-    tracing_subscriber::registry().with(filter).with(file_layer).init();
+    tracing_subscriber::registry()
+      .with(filter)
+      .with(file_layer)
+      .init();
   }
 
   Ok(())
@@ -66,7 +64,9 @@ fn cleanup_old_logs(log_dir: &Path, retention_days: u64) -> anyhow::Result<()> {
   }
 
   let cutoff = SystemTime::now()
-    .checked_sub(Duration::from_secs(retention_days.saturating_mul(24 * 60 * 60)))
+    .checked_sub(Duration::from_secs(
+      retention_days.saturating_mul(24 * 60 * 60),
+    ))
     .unwrap_or(SystemTime::UNIX_EPOCH);
 
   let entries = match fs::read_dir(log_dir) {
@@ -106,4 +106,3 @@ fn is_agent_log_file(path: &Path) -> bool {
 
   name == "agent-core.log" || name.starts_with("agent-core.log.")
 }
-

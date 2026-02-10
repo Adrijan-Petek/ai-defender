@@ -45,19 +45,28 @@ fn run_service_inner() -> anyhow::Result<()> {
 
   let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
-  let status_handle = service_control_handler::register(SERVICE_NAME, move |control_event| {
-    match control_event {
+  let status_handle =
+    service_control_handler::register(SERVICE_NAME, move |control_event| match control_event {
       ServiceControl::Stop | ServiceControl::Shutdown => {
         let _ = stop_tx.send(());
         ServiceControlHandlerResult::NoError
       }
       _ => ServiceControlHandlerResult::NotImplemented,
-    }
-  })?;
+    })?;
 
-  set_service_status(&status_handle, ServiceState::StartPending, 1, Duration::from_secs(10))?;
+  set_service_status(
+    &status_handle,
+    ServiceState::StartPending,
+    1,
+    Duration::from_secs(10),
+  )?;
   tracing::info!("service starting");
-  set_service_status(&status_handle, ServiceState::Running, 0, Duration::default())?;
+  set_service_status(
+    &status_handle,
+    ServiceState::Running,
+    0,
+    Duration::default(),
+  )?;
 
   let agent = Agent::new(cfg);
   let res = agent.run(stop_rx, Duration::from_millis(500));
@@ -65,7 +74,12 @@ fn run_service_inner() -> anyhow::Result<()> {
     tracing::error!(error = ?e, "agent loop exited with error");
   }
 
-  set_service_status(&status_handle, ServiceState::Stopped, 0, Duration::default())?;
+  set_service_status(
+    &status_handle,
+    ServiceState::Stopped,
+    0,
+    Duration::default(),
+  )?;
   tracing::info!("service stopped");
   Ok(())
 }

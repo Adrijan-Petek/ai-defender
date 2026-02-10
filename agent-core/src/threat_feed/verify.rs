@@ -38,4 +38,3 @@ fn verifying_key() -> anyhow::Result<VerifyingKey> {
   arr.copy_from_slice(&pk);
   Ok(VerifyingKey::from_bytes(&arr)?)
 }
-

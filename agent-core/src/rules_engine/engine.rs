@@ -1,6 +1,6 @@
-use crate::config::{AllowlistConfig, Config};
-use crate::types::{Evidence, Event, Finding, Incident, Severity};
 use super::protected_paths;
+use crate::config::{AllowlistConfig, Config};
+use crate::types::{Event, Evidence, Finding, Incident, Severity};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
@@ -101,8 +101,7 @@ impl Engine {
             continue;
           }
 
-          let allowlisted =
-            publisher_allowlisted(&cfg.allowlist, proc.signer_publisher.as_deref());
+          let allowlisted = publisher_allowlisted(&cfg.allowlist, proc.signer_publisher.as_deref());
 
           let mut findings = Vec::new();
 
@@ -128,7 +127,8 @@ impl Engine {
             findings.push(Finding {
               rule_id: "R008".to_string(),
               severity: Severity::Yellow,
-              description: "Unknown/unsigned publisher touched protected browser target".to_string(),
+              description: "Unknown/unsigned publisher touched protected browser target"
+                .to_string(),
               evidence: vec![Evidence::Note {
                 message: "signer_publisher missing".to_string(),
               }],
@@ -175,12 +175,7 @@ impl Engine {
           self.prune_old(*pid, *timestamp_unix_ms, cfg.correlation_window_seconds);
           let proc = self.proc_info(*pid, image_path);
 
-          let Some(access) = self
-            .sensitive
-            .get(pid)
-            .and_then(|q| q.back())
-            .cloned()
-          else {
+          let Some(access) = self.sensitive.get(pid).and_then(|q| q.back()).cloned() else {
             continue;
           };
 
@@ -234,7 +229,11 @@ impl Engine {
             timestamp_unix_ms: *timestamp_unix_ms,
           });
 
-          if dest_host.as_deref().map(|h| h.trim().is_empty()).unwrap_or(true) {
+          if dest_host
+            .as_deref()
+            .map(|h| h.trim().is_empty())
+            .unwrap_or(true)
+          {
             findings.push(Finding {
               rule_id: "R010".to_string(),
               severity: Severity::Red,
@@ -299,7 +298,9 @@ impl Engine {
       return p.clone();
     }
     ProcessInfo {
-      image_path: image_path.clone().unwrap_or_else(|| "<unknown>".to_string()),
+      image_path: image_path
+        .clone()
+        .unwrap_or_else(|| "<unknown>".to_string()),
       signer_publisher: None,
     }
   }
@@ -383,7 +384,9 @@ mod tests {
     ];
 
     let incidents = eng.process(&cfg, &events).unwrap();
-    assert!(incidents.iter().any(|i| i.findings.iter().any(|f| f.rule_id == "R009")));
+    assert!(incidents
+      .iter()
+      .any(|i| i.findings.iter().any(|f| f.rule_id == "R009")));
     assert!(incidents.iter().any(|i| i.severity == Severity::Red));
   }
 
@@ -424,7 +427,9 @@ mod tests {
     ];
 
     let incidents = eng.process(&cfg, &events).unwrap();
-    assert!(!incidents.iter().any(|i| i.findings.iter().any(|f| f.rule_id == "R009")));
+    assert!(!incidents
+      .iter()
+      .any(|i| i.findings.iter().any(|f| f.rule_id == "R009")));
   }
 
   #[test]

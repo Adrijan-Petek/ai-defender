@@ -89,11 +89,11 @@ pub fn rules_status() -> anyhow::Result<FirewallRuleStatus> {
 #[cfg(windows)]
 mod com {
   use super::*;
-  use windows::core::{BSTR, HRESULT, Result as WinResult};
-  use windows::Win32::Foundation::{E_ACCESSDENIED, ERROR_FILE_NOT_FOUND, VARIANT_TRUE};
+  use windows::core::{Result as WinResult, BSTR, HRESULT};
+  use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, E_ACCESSDENIED, VARIANT_TRUE};
   use windows::Win32::NetworkManagement::WindowsFirewall::{
-    INetFwPolicy2, INetFwRule, NetFwPolicy2, NetFwRule, NET_FW_ACTION_BLOCK, NET_FW_IP_PROTOCOL_ANY,
-    NET_FW_PROFILE2_ALL, NET_FW_RULE_DIRECTION,
+    INetFwPolicy2, INetFwRule, NetFwPolicy2, NetFwRule, NET_FW_ACTION_BLOCK,
+    NET_FW_IP_PROTOCOL_ANY, NET_FW_PROFILE2_ALL, NET_FW_RULE_DIRECTION,
   };
   use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
@@ -187,8 +187,7 @@ mod com {
         if !not_found {
           return Err(e);
         }
-        let rule: INetFwRule =
-          unsafe { CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER) }?;
+        let rule: INetFwRule = unsafe { CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER) }?;
         apply_rule_properties(&rule, name, direction)?;
         unsafe {
           rules.Add(&rule)?;

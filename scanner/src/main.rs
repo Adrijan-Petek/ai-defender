@@ -11,4 +11,3 @@ fn main() -> anyhow::Result<()> {
   let mode = scanner::ScanMode::from_args(&args)?;
   scanner::run(mode).context("scanner run")
 }
-

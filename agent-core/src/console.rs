@@ -1,8 +1,8 @@
 use crate::config::Config;
 use crate::incident_store;
 use crate::kill_switch;
-use crate::{license, paths, threat_feed};
 use crate::types::{now_unix_ms, Event, FileAccessType};
+use crate::{license, paths, threat_feed};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -55,7 +55,10 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
         print_admin_hint(&e);
         return Err(e);
       }
-      tracing::warn!(group = kill_switch::FIREWALL_RULE_GROUP, "manual kill switch enabled");
+      tracing::warn!(
+        group = kill_switch::FIREWALL_RULE_GROUP,
+        "manual kill switch enabled"
+      );
       println!("Kill switch enabled: ALL inbound + outbound traffic is now blocked.");
       Ok(ConsoleAction::ExitOk)
     }
@@ -64,7 +67,10 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
         print_admin_hint(&e);
         return Err(e);
       }
-      tracing::info!(group = kill_switch::FIREWALL_RULE_GROUP, "kill switch disabled");
+      tracing::info!(
+        group = kill_switch::FIREWALL_RULE_GROUP,
+        "kill switch disabled"
+      );
       println!("Kill switch disabled: networking should be restored.");
       Ok(ConsoleAction::ExitOk)
     }
@@ -175,7 +181,9 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
       Ok(ConsoleAction::ExitOk)
     }
     _ => {
-      eprintln!("Unknown `--license` subcommand. Expected: status|install <json> <sig>|activate|deactivate");
+      eprintln!(
+        "Unknown `--license` subcommand. Expected: status|install <json> <sig>|activate|deactivate"
+      );
       print_help();
       Ok(ConsoleAction::ExitOk)
     }
@@ -235,7 +243,9 @@ fn run_feed(tail: &[String]) -> anyhow::Result<ConsoleAction> {
       Ok(ConsoleAction::ExitOk)
     }
     _ => {
-      eprintln!("Unknown `--feed` subcommand. Expected: status|import <path>|verify <bundle> <sig>");
+      eprintln!(
+        "Unknown `--feed` subcommand. Expected: status|import <path>|verify <bundle> <sig>"
+      );
       print_help();
       Ok(ConsoleAction::ExitOk)
     }
@@ -250,7 +260,10 @@ fn run_simulate(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> 
       let pid = 4242;
       let base = now_unix_ms();
       let image = "C:\\Temp\\evil.exe".to_string();
-      let file_path = format!("{}\\Google\\Chrome\\User Data\\Default\\Login Data", localappdata());
+      let file_path = format!(
+        "{}\\Google\\Chrome\\User Data\\Default\\Login Data",
+        localappdata()
+      );
 
       let events = vec![
         Event::ProcessStart {
@@ -323,7 +336,10 @@ fn run_simulate(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> 
       let pid = 4242;
       let base = now_unix_ms();
       let image = "C:\\Temp\\evil.exe".to_string();
-      let file_path = format!("{}\\Google\\Chrome\\User Data\\Default\\Login Data", localappdata());
+      let file_path = format!(
+        "{}\\Google\\Chrome\\User Data\\Default\\Login Data",
+        localappdata()
+      );
 
       let events = vec![
         Event::ProcessStart {
@@ -386,7 +402,10 @@ fn run_simulate(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> 
       let pid = 4242;
       let base = now_unix_ms();
       let image = "C:\\Temp\\evil.exe".to_string();
-      let file_path = format!("{}\\Google\\Chrome\\User Data\\Default\\Login Data", localappdata());
+      let file_path = format!(
+        "{}\\Google\\Chrome\\User Data\\Default\\Login Data",
+        localappdata()
+      );
 
       let events = vec![
         Event::ProcessStart {
@@ -423,7 +442,9 @@ fn run_simulate(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> 
       Ok(ConsoleAction::ExitOk)
     }
     _ => {
-      eprintln!("Unknown `--simulate` subcommand. Expected: red|file-access-chrome|net-connect|chain-red");
+      eprintln!(
+        "Unknown `--simulate` subcommand. Expected: red|file-access-chrome|net-connect|chain-red"
+      );
       print_help();
       Ok(ConsoleAction::ExitOk)
     }
@@ -496,7 +517,11 @@ fn parse_bool(s: &str) -> Option<bool> {
 }
 
 fn strip_console_flag(args: &[String]) -> Vec<String> {
-  args.iter().filter(|a| a.as_str() != "--console").cloned().collect()
+  args
+    .iter()
+    .filter(|a| a.as_str() != "--console")
+    .cloned()
+    .collect()
 }
 
 fn print_help() {

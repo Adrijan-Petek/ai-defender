@@ -42,4 +42,3 @@ pub struct ReputationPayload {
   #[serde(default)]
   pub wallet_drain_patterns: Vec<String>,
 }
-

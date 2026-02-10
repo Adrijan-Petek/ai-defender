@@ -108,8 +108,8 @@ pub fn status(base: &Path) -> FeedStatus {
 }
 
 pub fn verify_files(bundle_path: &Path, sig_path: &Path) -> anyhow::Result<ThreatFeedBundle> {
-  let bundle_json = fs::read(bundle_path)
-    .with_context(|| format!("read {}", bundle_path.display()))?;
+  let bundle_json =
+    fs::read(bundle_path).with_context(|| format!("read {}", bundle_path.display()))?;
   let sig = fs::read(sig_path).with_context(|| format!("read {}", sig_path.display()))?;
 
   // Signature file may be raw 64 bytes or base64url text.
@@ -135,13 +135,21 @@ pub fn verify_files(bundle_path: &Path, sig_path: &Path) -> anyhow::Result<Threa
   Ok(bundle)
 }
 
-pub fn import(base: &Path, src_bundle: &Path, src_sig: Option<&Path>) -> anyhow::Result<FeedStatus> {
+pub fn import(
+  base: &Path,
+  src_bundle: &Path,
+  src_sig: Option<&Path>,
+) -> anyhow::Result<FeedStatus> {
   let (bundle_path, sig_path) = resolve_import_paths(src_bundle, src_sig)?;
   let bundle = verify_files(&bundle_path, &sig_path).context("verify bundle and signature")?;
 
   let current = current_version(base).unwrap_or(0);
   if bundle.version <= current {
-    anyhow::bail!("bundle version {} is not newer than installed {}", bundle.version, current);
+    anyhow::bail!(
+      "bundle version {} is not newer than installed {}",
+      bundle.version,
+      current
+    );
   }
 
   let dst_dir = paths::threat_feed_dir(base);
@@ -181,7 +189,10 @@ fn current_version(base: &Path) -> Option<u64> {
   Some(b.version)
 }
 
-fn resolve_import_paths(src_bundle: &Path, src_sig: Option<&Path>) -> anyhow::Result<(PathBuf, PathBuf)> {
+fn resolve_import_paths(
+  src_bundle: &Path,
+  src_sig: Option<&Path>,
+) -> anyhow::Result<(PathBuf, PathBuf)> {
   if let Some(sig) = src_sig {
     return Ok((src_bundle.to_path_buf(), sig.to_path_buf()));
   }

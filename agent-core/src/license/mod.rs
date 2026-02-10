@@ -64,14 +64,13 @@ pub fn install_license(
   from_license_json: &Path,
   from_license_sig: &Path,
 ) -> anyhow::Result<LicenseStatus> {
-  let payload_bytes = fs::read(from_license_json)
-    .with_context(|| format!("read {}", from_license_json.display()))?;
-  let sig_bytes = fs::read(from_license_sig)
-    .with_context(|| format!("read {}", from_license_sig.display()))?;
+  let payload_bytes =
+    fs::read(from_license_json).with_context(|| format!("read {}", from_license_json.display()))?;
+  let sig_bytes =
+    fs::read(from_license_sig).with_context(|| format!("read {}", from_license_sig.display()))?;
 
   // Validate before copying.
-  let (payload, state, reason) =
-    validate_payload_and_signature(&payload_bytes, &sig_bytes)?;
+  let (payload, state, reason) = validate_payload_and_signature(&payload_bytes, &sig_bytes)?;
 
   if state != LicenseState::ProActive && state != LicenseState::ProExpired {
     anyhow::bail!(reason.unwrap_or_else(|| "license validation failed".to_string()));
@@ -105,11 +104,9 @@ pub fn install_license(
 }
 
 pub fn activate(base: &Path) -> anyhow::Result<LicenseStatus> {
-  let (payload_bytes, sig_bytes) = load_license_files(base)
-    .context("load installed license")?;
+  let (payload_bytes, sig_bytes) = load_license_files(base).context("load installed license")?;
 
-  let (payload, state, reason) =
-    validate_payload_and_signature(&payload_bytes, &sig_bytes)?;
+  let (payload, state, reason) = validate_payload_and_signature(&payload_bytes, &sig_bytes)?;
 
   match state {
     LicenseState::ProExpired => {
@@ -181,24 +178,23 @@ pub fn status(base: &Path) -> LicenseStatus {
     return st;
   };
 
-  let (payload, state, reason) =
-    match validate_payload_and_signature(&payload_bytes, &sig_bytes) {
-      Ok(x) => x,
-      Err(e) => {
-        let st = LicenseStatus {
-          state: LicenseState::ProInvalid,
-          license_id: None,
-          plan: None,
-          seats: None,
-          expires_at_unix_seconds: None,
-          last_verified_at_unix_seconds: None,
-          checked_at_unix_seconds: checked,
-          reason: Some(format!("invalid license: {e:#}")),
-        };
-        let _ = write_status(base, &st);
-        return st;
-      }
-    };
+  let (payload, state, reason) = match validate_payload_and_signature(&payload_bytes, &sig_bytes) {
+    Ok(x) => x,
+    Err(e) => {
+      let st = LicenseStatus {
+        state: LicenseState::ProInvalid,
+        license_id: None,
+        plan: None,
+        seats: None,
+        expires_at_unix_seconds: None,
+        last_verified_at_unix_seconds: None,
+        checked_at_unix_seconds: checked,
+        reason: Some(format!("invalid license: {e:#}")),
+      };
+      let _ = write_status(base, &st);
+      return st;
+    }
+  };
 
   if state == LicenseState::ProExpired {
     let st = LicenseStatus {
@@ -308,28 +304,49 @@ fn normalize_sig_bytes(raw: &[u8]) -> anyhow::Result<Vec<u8>> {
 
 fn validate_fields(payload: &LicensePayloadV1) -> (LicenseState, Option<String>) {
   if payload.version != 1 {
-    return (LicenseState::ProInvalid, Some("unsupported license version".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("unsupported license version".to_string()),
+    );
   }
   if uuid::Uuid::parse_str(payload.license_id.trim()).is_err() {
-    return (LicenseState::ProInvalid, Some("license_id must be a UUID".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("license_id must be a UUID".to_string()),
+    );
   }
   if payload.plan.trim() != "pro" {
-    return (LicenseState::ProInvalid, Some("plan must be \"pro\"".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("plan must be \"pro\"".to_string()),
+    );
   }
   if payload.seats < 1 {
-    return (LicenseState::ProInvalid, Some("seats must be >= 1".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("seats must be >= 1".to_string()),
+    );
   }
   if payload.user_id.trim().is_empty() {
-    return (LicenseState::ProInvalid, Some("user_id must be present".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("user_id must be present".to_string()),
+    );
   }
   if payload.issued_at == 0 {
-    return (LicenseState::ProInvalid, Some("issued_at must be set".to_string()));
+    return (
+      LicenseState::ProInvalid,
+      Some("issued_at must be set".to_string()),
+    );
   }
 
   let now = now_unix_s();
   if let Some(exp) = payload.expires_at {
     if exp <= now {
-      return (LicenseState::ProExpired, Some("license expired".to_string()));
+      return (
+        LicenseState::ProExpired,
+        Some("license expired".to_string()),
+      );
     }
   }
 
@@ -352,7 +369,8 @@ fn load_license_files(base: &Path) -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
   let json_path = paths::license_json_path(base);
   let sig_path = paths::license_sig_path(base);
 
-  let payload_bytes = fs::read(&json_path).with_context(|| format!("read {}", json_path.display()))?;
+  let payload_bytes =
+    fs::read(&json_path).with_context(|| format!("read {}", json_path.display()))?;
   let sig_bytes = fs::read(&sig_path).with_context(|| format!("read {}", sig_path.display()))?;
 
   Ok((payload_bytes, sig_bytes))
@@ -405,7 +423,9 @@ fn write_status(base: &Path, st: &LicenseStatus) -> anyhow::Result<()> {
 }
 
 fn atomic_write_file(dst: &Path, bytes: &[u8]) -> anyhow::Result<()> {
-  let dir = dst.parent().context("destination has no parent directory")?;
+  let dir = dst
+    .parent()
+    .context("destination has no parent directory")?;
   fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
 
   let tmp = tmp_path(dst);
@@ -415,10 +435,7 @@ fn atomic_write_file(dst: &Path, bytes: &[u8]) -> anyhow::Result<()> {
 }
 
 fn tmp_path(dst: &Path) -> PathBuf {
-  let name = dst
-    .file_name()
-    .and_then(|s| s.to_str())
-    .unwrap_or("tmp");
+  let name = dst.file_name().and_then(|s| s.to_str()).unwrap_or("tmp");
   dst.with_file_name(format!("{name}.new"))
 }
 
@@ -478,7 +495,7 @@ fn now_unix_s() -> u64 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use ed25519_dalek::{SigningKey, Signer};
+  use ed25519_dalek::{Signer, SigningKey};
 
   fn sign(payload: &[u8], key: &SigningKey) -> [u8; 64] {
     let sig: Signature = key.sign(payload);
@@ -519,4 +536,3 @@ mod tests {
     assert_eq!(st, LicenseState::ProExpired);
   }
 }
-
