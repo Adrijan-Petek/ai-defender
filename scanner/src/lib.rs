@@ -88,7 +88,7 @@ pub fn run(mode: ScanMode) -> anyhow::Result<()> {
       }
 
       scanned += 1;
-      if scanned % 250 == 0 {
+      if scanned.is_multiple_of(250) {
         println!(
           "PROGRESS scanned={scanned} findings={} current={}",
           findings.len(),
@@ -103,18 +103,15 @@ pub fn run(mode: ScanMode) -> anyhow::Result<()> {
         continue;
       }
 
-      match scan_file(p) {
-        Ok(mut fs) => {
-          for f in fs.drain(..) {
-            if let Some(hash) = extract_sha256(&f) {
-              if !seen_hashes.insert(hash) {
-                continue;
-              }
+      if let Ok(mut fs) = scan_file(p) {
+        for f in fs.drain(..) {
+          if let Some(hash) = extract_sha256(&f) {
+            if !seen_hashes.insert(hash) {
+              continue;
             }
-            findings.push(f);
           }
+          findings.push(f);
         }
-        Err(_) => {}
       }
     }
   }
