@@ -159,7 +159,8 @@ impl AutoRefreshScheduler {
       return;
     }
     let now = now_unix_ms();
-    self.next_due_unix_ms = Some(now.saturating_add(eligibility.interval_minutes.saturating_mul(60_000)));
+    self.next_due_unix_ms =
+      Some(now.saturating_add(eligibility.interval_minutes.saturating_mul(60_000)));
   }
 }
 
@@ -168,7 +169,8 @@ pub fn verify_bundle_signature(bundle_json: &[u8], sig_bytes: &[u8]) -> bool {
 }
 
 pub fn verify_files(bundle_path: &Path, sig_path: &Path) -> anyhow::Result<ThreatFeedBundle> {
-  let bundle_json = fs::read(bundle_path).with_context(|| format!("read {}", bundle_path.display()))?;
+  let bundle_json =
+    fs::read(bundle_path).with_context(|| format!("read {}", bundle_path.display()))?;
   let sig_raw = fs::read(sig_path).with_context(|| format!("read {}", sig_path.display()))?;
   verify_bundle_bytes(&bundle_json, &sig_raw)
 }
@@ -236,7 +238,8 @@ pub fn bundle_status_at(base: &Path) -> BundleStatus {
 }
 
 pub fn import(base: &Path, src_bundle: &Path, src_sig: &Path) -> anyhow::Result<BundleStatus> {
-  let bundle_json = fs::read(src_bundle).with_context(|| format!("read {}", src_bundle.display()))?;
+  let bundle_json =
+    fs::read(src_bundle).with_context(|| format!("read {}", src_bundle.display()))?;
   let sig_raw = fs::read(src_sig).with_context(|| format!("read {}", src_sig.display()))?;
 
   let bundle = verify_bundle_bytes(&bundle_json, &sig_raw)?;
@@ -377,7 +380,10 @@ pub fn auto_refresh_eligibility(cfg: &Config, base: &Path) -> AutoRefreshEligibi
     return AutoRefreshEligibility {
       eligible: false,
       interval_minutes: cfg.threat_feed.refresh_interval_minutes,
-      reason: format!("Auto refresh disabled (invalid config: {})", short_error(&e)),
+      reason: format!(
+        "Auto refresh disabled (invalid config: {})",
+        short_error(&e)
+      ),
     };
   }
 
@@ -427,11 +433,7 @@ pub fn status(base: &Path) -> FeedStatus {
   out
 }
 
-fn install_verified_bundle(
-  base: &Path,
-  bundle_json: &[u8],
-  sig_raw: &[u8],
-) -> anyhow::Result<()> {
+fn install_verified_bundle(base: &Path, bundle_json: &[u8], sig_raw: &[u8]) -> anyhow::Result<()> {
   if runtime::is_dry_run() {
     tracing::warn!("DRY-RUN: would install verified threat feed bundle");
     return Ok(());
@@ -458,7 +460,8 @@ fn install_verified_bundle(
 fn verify_bundle_bytes(bundle_json: &[u8], sig_raw: &[u8]) -> anyhow::Result<ThreatFeedBundle> {
   let sig = decode_sig_file(sig_raw)?;
   verify::verify_bundle_signature(bundle_json, &sig)?;
-  let bundle: ThreatFeedBundle = serde_json::from_slice(bundle_json).context("parse bundle JSON")?;
+  let bundle: ThreatFeedBundle =
+    serde_json::from_slice(bundle_json).context("parse bundle JSON")?;
   validate_bundle_schema(&bundle)?;
   Ok(bundle)
 }
@@ -546,7 +549,8 @@ fn atomic_write_file(dst: &Path, bytes: &[u8]) -> anyhow::Result<()> {
 
   let tmp = tmp_path(dst);
   fs::write(&tmp, bytes).with_context(|| format!("write {}", tmp.display()))?;
-  fs::rename(&tmp, dst).with_context(|| format!("rename {} -> {}", tmp.display(), dst.display()))?;
+  fs::rename(&tmp, dst)
+    .with_context(|| format!("rename {} -> {}", tmp.display(), dst.display()))?;
   Ok(())
 }
 

@@ -57,9 +57,7 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
         return Err(e);
       }
       if runtime::is_dry_run() {
-        println!(
-          "DRY-RUN: would enable firewall kill switch (group AI_DEFENDER_KILLSWITCH)."
-        );
+        println!("DRY-RUN: would enable firewall kill switch (group AI_DEFENDER_KILLSWITCH).");
         return Ok(ConsoleAction::ExitOk);
       }
       tracing::warn!(
@@ -75,9 +73,7 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
         return Err(e);
       }
       if runtime::is_dry_run() {
-        println!(
-          "DRY-RUN: would remove firewall rules (group AI_DEFENDER_KILLSWITCH)."
-        );
+        println!("DRY-RUN: would remove firewall rules (group AI_DEFENDER_KILLSWITCH).");
         return Ok(ConsoleAction::ExitOk);
       }
       tracing::info!(
@@ -307,10 +303,7 @@ fn run_feed(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> {
         if st.enabled { "enabled" } else { "disabled" }
       );
       println!("Interval minutes: {}", st.interval_minutes);
-      println!(
-        "Eligible now: {}",
-        if st.eligible { "yes" } else { "no" }
-      );
+      println!("Eligible now: {}", if st.eligible { "yes" } else { "no" });
       println!("Reason: {}", st.reason);
       match st.last_attempt_at {
         Some(ts) => println!("Last attempt (unix seconds): {ts}"),

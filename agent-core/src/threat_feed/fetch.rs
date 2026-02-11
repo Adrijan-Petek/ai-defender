@@ -104,7 +104,10 @@ fn validate_endpoint(url: &Url, allowlist_domains: &[String]) -> anyhow::Result<
 fn http_get_bytes(client: &Client, url: &Url, max_bytes: usize) -> anyhow::Result<Vec<u8>> {
   let response = client
     .get(url.clone())
-    .header(USER_AGENT, format!("AI-Defender/{}", env!("CARGO_PKG_VERSION")))
+    .header(
+      USER_AGENT,
+      format!("AI-Defender/{}", env!("CARGO_PKG_VERSION")),
+    )
     .send()
     .with_context(|| format!("GET {}", safe_url_label(url)))?;
 
@@ -121,9 +124,10 @@ fn http_get_bytes(client: &Client, url: &Url, max_bytes: usize) -> anyhow::Resul
 
 fn read_response_with_limit(mut response: Response, max_bytes: usize) -> anyhow::Result<Vec<u8>> {
   let mut out = Vec::new();
-  let mut limited = response
-    .take((max_bytes.saturating_add(1)) as u64);
-  limited.read_to_end(&mut out).context("read response body")?;
+  let mut limited = response.take((max_bytes.saturating_add(1)) as u64);
+  limited
+    .read_to_end(&mut out)
+    .context("read response body")?;
 
   if out.len() > max_bytes {
     anyhow::bail!("response exceeds max size {} bytes", max_bytes);
