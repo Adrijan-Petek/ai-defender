@@ -112,12 +112,14 @@
       Execute="deferred"
       Return="ignore"
       Impersonate="no"
+      Directory="SystemFolder"
       ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
     <CustomAction
       Id="caRemoveProgramData"
       Execute="deferred"
       Return="ignore"
       Impersonate="no"
+      Directory="SystemFolder"
       ExeCommand="cmd.exe /c if exist &quot;[CommonAppDataFolder]AI Defender&quot; rmdir /s /q &quot;[CommonAppDataFolder]AI Defender&quot;" />
 
     <InstallExecuteSequence>
