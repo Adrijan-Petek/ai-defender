@@ -1,0 +1,26 @@
+mode = "learning"
+correlation_window_seconds = 120
+
+[logging]
+level = "info"
+retention_days = 14
+
+[killswitch]
+enabled = true
+auto_trigger = true
+failsafe_minutes = 10
+
+[allowlist]
+publishers = ["Microsoft Windows", "Google LLC", "Mozilla Corporation"]
+paths_allowlist = []
+
+[protected]
+chrome_targets = ["Login Data", "Cookies", "Local State"]
+firefox_targets = ["logins.json", "key4.db", "cookies.sqlite"]
+
+[threat_feed]
+auto_refresh = false
+refresh_interval_minutes = 60
+endpoints = ["https://updates.aidefender.shop/feed/"]
+allowlist_domains = ["updates.aidefender.shop"]
+timeout_seconds = 10

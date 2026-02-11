@@ -61,6 +61,10 @@ pub fn threat_feed_sig_path(base: &Path) -> PathBuf {
   threat_feed_dir(base).join("bundle.sig")
 }
 
+pub fn threat_feed_meta_path(base: &Path) -> PathBuf {
+  threat_feed_dir(base).join("bundle.meta.json")
+}
+
 pub fn threat_feed_state_path(base: &Path) -> PathBuf {
   threat_feed_dir(base).join("state.toml")
 }

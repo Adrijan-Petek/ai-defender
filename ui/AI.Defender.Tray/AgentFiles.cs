@@ -167,5 +167,9 @@ internal sealed record ThreatFeedState(
   bool Verified,
   ulong? Version,
   ulong? InstalledAtUnixMs,
+  ulong? CreatedAtUnixMs,
+  ulong? LastVerifiedAtUnixMs,
+  ulong? LastRefreshAttemptAtUnixMs,
+  string? LastRefreshResult,
   ulong CheckedAtUnixMs,
   string? Reason);

@@ -185,6 +185,10 @@ internal static class TomlMini
     bool verified = false;
     ulong? version = null;
     ulong? installedAt = null;
+    ulong? createdAt = null;
+    ulong? lastVerifiedAt = null;
+    ulong? lastRefreshAttemptAt = null;
+    string? lastRefreshResult = null;
     ulong checkedAt = 0;
     string? reason = null;
 
@@ -209,6 +213,27 @@ internal static class TomlMini
         case "installed_at_unix_ms":
           installedAt = ParseNullableU64(value);
           break;
+        case "created_at_unix_seconds":
+          {
+            var s = ParseNullableU64(value);
+            createdAt = s is null ? null : s.Value * 1000;
+            break;
+          }
+        case "last_verified_at_unix_seconds":
+          {
+            var s = ParseNullableU64(value);
+            lastVerifiedAt = s is null ? null : s.Value * 1000;
+            break;
+          }
+        case "last_refresh_attempt_at_unix_seconds":
+          {
+            var s = ParseNullableU64(value);
+            lastRefreshAttemptAt = s is null ? null : s.Value * 1000;
+            break;
+          }
+        case "last_refresh_result":
+          lastRefreshResult = ParseNullableString(value);
+          break;
         case "checked_at_unix_ms":
           checkedAt = ParseU64(value);
           break;
@@ -218,7 +243,17 @@ internal static class TomlMini
       }
     }
 
-    return new ThreatFeedState(installed, verified, version, installedAt, checkedAt, reason);
+    return new ThreatFeedState(
+      installed,
+      verified,
+      version,
+      installedAt,
+      createdAt,
+      lastVerifiedAt,
+      lastRefreshAttemptAt,
+      lastRefreshResult,
+      checkedAt,
+      reason);
   }
 
   public static IncidentSummary? ParseIncidentSummary(string text)

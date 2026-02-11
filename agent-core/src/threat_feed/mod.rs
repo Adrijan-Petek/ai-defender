@@ -1,18 +1,17 @@
+use crate::config::Config;
+use crate::license::{self, LicenseState};
 use crate::paths;
 use crate::types::now_unix_ms;
 use anyhow::Context;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod fetch;
 pub mod schema;
 pub mod verify;
 
-use schema::ThreatFeedBundle;
+use schema::{ReputationLists, ThreatFeedBundle};
 
-// Threat feed client interface (disabled by default).
-//
-// v1 does not perform outbound network calls automatically. Paid services may later provide an
-// implementation that downloads signed bundles, but the agent must remain fully functional offline.
 pub struct DownloadedBundle {
   pub bundle_json: Vec<u8>,
   pub signature: Vec<u8>,
@@ -27,6 +26,37 @@ pub struct DisabledClient;
 impl ThreatFeedClient for DisabledClient {
   fn fetch_latest(&self) -> anyhow::Result<DownloadedBundle> {
     anyhow::bail!("threat feed download is disabled by default; use offline import")
+  }
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct BundleMeta {
+  pub last_imported_at: Option<u64>,
+  pub last_verified_at: Option<u64>,
+  pub last_refresh_attempt_at: Option<u64>,
+  pub last_refresh_result: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BundleStatus {
+  pub present: bool,
+  pub rules_version: Option<u64>,
+  pub created_at: Option<u64>,
+  pub verified_at: Option<u64>,
+  pub last_refresh_attempt_at: Option<u64>,
+  pub last_refresh_result: Option<String>,
+}
+
+impl BundleStatus {
+  pub fn none() -> Self {
+    Self {
+      present: false,
+      rules_version: None,
+      created_at: None,
+      verified_at: None,
+      last_refresh_attempt_at: None,
+      last_refresh_result: None,
+    }
   }
 }
 
@@ -53,219 +83,448 @@ impl FeedStatus {
   }
 }
 
-pub fn status(base: &Path) -> FeedStatus {
-  let bundle_path = paths::threat_feed_bundle_path(base);
-  let sig_path = paths::threat_feed_sig_path(base);
+#[derive(Debug, Clone)]
+pub struct AutoRefreshEligibility {
+  pub eligible: bool,
+  pub interval_minutes: u64,
+  pub reason: String,
+}
 
-  if !bundle_path.exists() || !sig_path.exists() {
-    let st = FeedStatus::none(Some("no bundle installed".to_string()));
-    let _ = write_state(base, &st);
-    return st;
+#[derive(Debug, Clone)]
+pub struct AutoRefreshStatus {
+  pub enabled: bool,
+  pub interval_minutes: u64,
+  pub eligible: bool,
+  pub reason: String,
+  pub last_attempt_at: Option<u64>,
+  pub last_result: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RefreshNowResult {
+  pub attempted: bool,
+  pub success: bool,
+  pub reason: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AutoRefreshScheduler {
+  next_due_unix_ms: Option<u64>,
+}
+
+impl AutoRefreshScheduler {
+  pub fn new(cfg: &Config, base: &Path) -> Self {
+    let mut out = Self::default();
+    out.recompute_due(cfg, base);
+    out
   }
 
-  match verify_files(&bundle_path, &sig_path) {
-    Ok(bundle) => {
-      let _ = write_last_good(base, &bundle_path, &sig_path);
-      let installed_at = bundle_mtime_unix_ms(&bundle_path);
-      let st = FeedStatus {
-        installed: true,
-        verified: true,
-        version: Some(bundle.version),
-        installed_at_unix_ms: installed_at,
-        checked_at_unix_ms: now_unix_ms(),
-        reason: None,
-      };
-      let _ = write_state(base, &st);
-      st
+  pub fn tick(&mut self, cfg: &Config, base: &Path) {
+    let eligibility = auto_refresh_eligibility(cfg, base);
+    if !eligibility.eligible {
+      self.next_due_unix_ms = None;
+      return;
     }
-    Err(e) => {
-      // If the current bundle is invalid (e.g., manual corruption), fall back to last-known-good.
-      if let Ok(bundle) = verify_last_good(base) {
-        let st = FeedStatus {
-          installed: true,
-          verified: true,
-          version: Some(bundle.version),
-          installed_at_unix_ms: bundle_mtime_unix_ms(&bundle_path),
-          checked_at_unix_ms: now_unix_ms(),
-          reason: Some("current bundle invalid; using last known good".to_string()),
-        };
-        let _ = write_state(base, &st);
-        return st;
-      }
 
-      let st = FeedStatus {
-        installed: true,
-        verified: false,
-        version: None,
-        installed_at_unix_ms: bundle_mtime_unix_ms(&bundle_path),
-        checked_at_unix_ms: now_unix_ms(),
-        reason: Some(format!("invalid bundle: {e:#}")),
-      };
-      let _ = write_state(base, &st);
-      st
+    let now = now_unix_ms();
+    let interval_ms = eligibility.interval_minutes.saturating_mul(60_000);
+
+    if self.next_due_unix_ms.is_none() {
+      self.next_due_unix_ms = Some(now.saturating_add(interval_ms));
+      return;
     }
+
+    let Some(next_due) = self.next_due_unix_ms else {
+      return;
+    };
+    if now < next_due {
+      return;
+    }
+
+    let result = refresh_now(cfg, base);
+    if result.attempted && result.success {
+      tracing::info!("threat feed auto-refresh succeeded");
+    } else if result.attempted {
+      tracing::warn!(reason = %result.reason, "threat feed auto-refresh failed");
+    }
+
+    self.next_due_unix_ms = Some(now.saturating_add(interval_ms));
   }
+
+  fn recompute_due(&mut self, cfg: &Config, base: &Path) {
+    let eligibility = auto_refresh_eligibility(cfg, base);
+    if !eligibility.eligible {
+      self.next_due_unix_ms = None;
+      return;
+    }
+    let now = now_unix_ms();
+    self.next_due_unix_ms = Some(now.saturating_add(eligibility.interval_minutes.saturating_mul(60_000)));
+  }
+}
+
+pub fn verify_bundle_signature(bundle_json: &[u8], sig_bytes: &[u8]) -> bool {
+  verify::verify_bundle_signature(bundle_json, sig_bytes).is_ok()
 }
 
 pub fn verify_files(bundle_path: &Path, sig_path: &Path) -> anyhow::Result<ThreatFeedBundle> {
-  let bundle_json =
-    fs::read(bundle_path).with_context(|| format!("read {}", bundle_path.display()))?;
-  let sig = fs::read(sig_path).with_context(|| format!("read {}", sig_path.display()))?;
+  let bundle_json = fs::read(bundle_path).with_context(|| format!("read {}", bundle_path.display()))?;
+  let sig_raw = fs::read(sig_path).with_context(|| format!("read {}", sig_path.display()))?;
+  verify_bundle_bytes(&bundle_json, &sig_raw)
+}
 
-  // Signature file may be raw 64 bytes or base64url text.
-  let sig_bytes = if sig.len() == 64 {
-    sig
-  } else {
-    let text = String::from_utf8(sig).context("signature file must be raw bytes or UTF-8")?;
-    verify::decode_sig_base64url(&text)?
+pub fn load_current() -> Option<ThreatFeedBundle> {
+  let base = paths::base_dir().ok()?;
+  load_current_at(&base)
+}
+
+pub fn load_current_at(base: &Path) -> Option<ThreatFeedBundle> {
+  let bundle_path = paths::threat_feed_bundle_path(base);
+  let sig_path = paths::threat_feed_sig_path(base);
+
+  if let Ok(bundle) = verify_files(&bundle_path, &sig_path) {
+    let _ = mark_verified(base);
+    return Some(bundle);
+  }
+
+  verify_last_good(base).ok()
+}
+
+pub fn get_reputation_lists() -> ReputationLists {
+  load_current()
+    .map(|bundle| bundle.reputation)
+    .unwrap_or_default()
+}
+
+pub fn get_reputation_lists_at(base: &Path) -> ReputationLists {
+  load_current_at(base)
+    .map(|bundle| bundle.reputation)
+    .unwrap_or_default()
+}
+
+pub fn bundle_status() -> BundleStatus {
+  let Ok(base) = paths::base_dir() else {
+    return BundleStatus::none();
+  };
+  bundle_status_at(&base)
+}
+
+pub fn bundle_status_at(base: &Path) -> BundleStatus {
+  let meta = read_meta(base);
+
+  if let Some(bundle) = load_current_at(base) {
+    return BundleStatus {
+      present: true,
+      rules_version: Some(bundle.rules_version),
+      created_at: Some(bundle.created_at),
+      verified_at: meta.last_verified_at,
+      last_refresh_attempt_at: meta.last_refresh_attempt_at,
+      last_refresh_result: meta.last_refresh_result,
+    };
+  }
+
+  BundleStatus {
+    present: false,
+    rules_version: None,
+    created_at: None,
+    verified_at: meta.last_verified_at,
+    last_refresh_attempt_at: meta.last_refresh_attempt_at,
+    last_refresh_result: meta.last_refresh_result,
+  }
+}
+
+pub fn import(base: &Path, src_bundle: &Path, src_sig: &Path) -> anyhow::Result<BundleStatus> {
+  let bundle_json = fs::read(src_bundle).with_context(|| format!("read {}", src_bundle.display()))?;
+  let sig_raw = fs::read(src_sig).with_context(|| format!("read {}", src_sig.display()))?;
+
+  verify_bundle_bytes(&bundle_json, &sig_raw)?;
+  install_verified_bundle(base, &bundle_json, &sig_raw)?;
+  Ok(bundle_status_at(base))
+}
+
+pub fn refresh_now(cfg: &Config, base: &Path) -> RefreshNowResult {
+  let eligibility = auto_refresh_eligibility(cfg, base);
+  if !eligibility.eligible {
+    return RefreshNowResult {
+      attempted: false,
+      success: false,
+      reason: eligibility.reason,
+    };
+  }
+
+  let attempt_at = now_unix_s();
+  let mut meta = read_meta(base);
+  meta.last_refresh_attempt_at = Some(attempt_at);
+
+  let fetched = match fetch::fetch_bundle(&cfg.threat_feed) {
+    Ok(v) => v,
+    Err(e) => {
+      meta.last_refresh_result = Some(format!("failed: {}", short_error(&e)));
+      let _ = write_meta(base, &meta);
+      return RefreshNowResult {
+        attempted: true,
+        success: false,
+        reason: format!("refresh failed: {}", short_error(&e)),
+      };
+    }
   };
 
-  verify::verify_bundle_signature(&bundle_json, &sig_bytes)?;
-  let bundle: ThreatFeedBundle =
-    serde_json::from_slice(&bundle_json).context("parse bundle JSON")?;
-
-  // Basic schema sanity.
-  if bundle.version == 0 {
-    anyhow::bail!("bundle version must be > 0");
+  if let Err(e) = verify_bundle_bytes(&fetched.bundle_json, &fetched.bundle_sig) {
+      meta.last_refresh_result = Some(format!("failed: verification {}", short_error(&e)));
+      let _ = write_meta(base, &meta);
+      tracing::warn!(host = %fetched.host, reason = %short_error(&e), "threat feed verification failed");
+      return RefreshNowResult {
+        attempted: true,
+        success: false,
+        reason: format!("verification failed: {}", short_error(&e)),
+      };
+    };
   }
-  if bundle.created_at_unix_ms == 0 {
-    anyhow::bail!("bundle created_at_unix_ms must be > 0");
+
+  if let Err(e) = install_verified_bundle(base, &fetched.bundle_json, &fetched.bundle_sig) {
+    meta.last_refresh_result = Some(format!("failed: install {}", short_error(&e)));
+    let _ = write_meta(base, &meta);
+    return RefreshNowResult {
+      attempted: true,
+      success: false,
+      reason: format!("install failed: {}", short_error(&e)),
+    };
   }
 
+  let mut meta2 = read_meta(base);
+  meta2.last_refresh_attempt_at = Some(attempt_at);
+  meta2.last_refresh_result = Some("success".to_string());
+  let _ = write_meta(base, &meta2);
+
+  tracing::info!(host = %fetched.host, "threat feed refresh succeeded");
+  RefreshNowResult {
+    attempted: true,
+    success: true,
+    reason: "success".to_string(),
+  }
+}
+
+pub fn auto_refresh_eligibility(cfg: &Config, base: &Path) -> AutoRefreshEligibility {
+  if !cfg.threat_feed.auto_refresh {
+    return AutoRefreshEligibility {
+      eligible: false,
+      interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+      reason: "Auto refresh disabled (config)".to_string(),
+    };
+  }
+
+  let lic = license::status(base);
+  match lic.state {
+    LicenseState::ProActive => {}
+    LicenseState::Community => {
+      return AutoRefreshEligibility {
+        eligible: false,
+        interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+        reason: "Auto refresh disabled (Community mode)".to_string(),
+      };
+    }
+    _ => {
+      return AutoRefreshEligibility {
+        eligible: false,
+        interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+        reason: "Auto refresh disabled (license not active)".to_string(),
+      };
+    }
+  }
+
+  if let Err(e) = fetch::validate_refresh_config(&cfg.threat_feed) {
+    return AutoRefreshEligibility {
+      eligible: false,
+      interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+      reason: format!("Auto refresh disabled (invalid config: {})", short_error(&e)),
+    };
+  }
+
+  AutoRefreshEligibility {
+    eligible: true,
+    interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+    reason: "eligible".to_string(),
+  }
+}
+
+pub fn auto_refresh_status(cfg: &Config, base: &Path) -> AutoRefreshStatus {
+  let eligibility = auto_refresh_eligibility(cfg, base);
+  let meta = read_meta(base);
+  AutoRefreshStatus {
+    enabled: cfg.threat_feed.auto_refresh,
+    interval_minutes: cfg.threat_feed.refresh_interval_minutes,
+    eligible: eligibility.eligible,
+    reason: eligibility.reason,
+    last_attempt_at: meta.last_refresh_attempt_at,
+    last_result: meta.last_refresh_result,
+  }
+}
+
+pub fn status(base: &Path) -> FeedStatus {
+  let checked = now_unix_ms();
+  let st = bundle_status_at(base);
+
+  if !st.present {
+    let out = FeedStatus::none(Some("no valid bundle installed".to_string()));
+    let _ = write_state(base, &out);
+    return out;
+  }
+
+  let out = FeedStatus {
+    installed: true,
+    verified: true,
+    version: st.rules_version,
+    installed_at_unix_ms: st.created_at.map(|seconds| seconds.saturating_mul(1000)),
+    checked_at_unix_ms: checked,
+    reason: st.last_refresh_result.clone(),
+  };
+  let _ = write_state(base, &out);
+  out
+}
+
+fn install_verified_bundle(
+  base: &Path,
+  bundle_json: &[u8],
+  sig_raw: &[u8],
+) -> anyhow::Result<()> {
+  let feed_dir = paths::threat_feed_dir(base);
+  fs::create_dir_all(&feed_dir).with_context(|| format!("create {}", feed_dir.display()))?;
+
+  let dst_bundle = paths::threat_feed_bundle_path(base);
+  let dst_sig = paths::threat_feed_sig_path(base);
+
+  atomic_write_file(&dst_bundle, bundle_json)?;
+  atomic_write_file(&dst_sig, sig_raw)?;
+  write_last_good(base, bundle_json, sig_raw)?;
+
+  let now = now_unix_s();
+  let mut meta = read_meta(base);
+  meta.last_imported_at = Some(now);
+  meta.last_verified_at = Some(now);
+  write_meta(base, &meta)?;
+  Ok(())
+}
+
+fn verify_bundle_bytes(bundle_json: &[u8], sig_raw: &[u8]) -> anyhow::Result<ThreatFeedBundle> {
+  let sig = decode_sig_file(sig_raw)?;
+  verify::verify_bundle_signature(bundle_json, &sig)?;
+  let bundle: ThreatFeedBundle = serde_json::from_slice(bundle_json).context("parse bundle JSON")?;
+  validate_bundle_schema(&bundle)?;
   Ok(bundle)
 }
 
-pub fn import(
-  base: &Path,
-  src_bundle: &Path,
-  src_sig: Option<&Path>,
-) -> anyhow::Result<FeedStatus> {
-  let (bundle_path, sig_path) = resolve_import_paths(src_bundle, src_sig)?;
-  let bundle = verify_files(&bundle_path, &sig_path).context("verify bundle and signature")?;
-
-  let current = current_version(base).unwrap_or(0);
-  if bundle.version <= current {
-    anyhow::bail!(
-      "bundle version {} is not newer than installed {}",
-      bundle.version,
-      current
-    );
+fn validate_bundle_schema(bundle: &ThreatFeedBundle) -> anyhow::Result<()> {
+  if bundle.version != 1 {
+    anyhow::bail!("unsupported bundle version {}; expected 1", bundle.version);
+  }
+  if uuid::Uuid::parse_str(bundle.bundle_id.trim()).is_err() {
+    anyhow::bail!("bundle_id must be a UUID");
+  }
+  if bundle.created_at == 0 {
+    anyhow::bail!("created_at must be > 0");
+  }
+  if bundle.rules_version == 0 {
+    anyhow::bail!("rules_version must be > 0");
   }
 
-  let dst_dir = paths::threat_feed_dir(base);
-  fs::create_dir_all(&dst_dir).with_context(|| format!("create {}", dst_dir.display()))?;
-
-  // Write to staging and then replace to avoid partial updates.
-  let staging_bundle = dst_dir.join("bundle.json.new");
-  let staging_sig = dst_dir.join("bundle.sig.new");
-  fs::copy(&bundle_path, &staging_bundle).with_context(|| "stage bundle.json")?;
-  fs::copy(&sig_path, &staging_sig).with_context(|| "stage bundle.sig")?;
-
-  // Final paths.
-  let dst_bundle = paths::threat_feed_bundle_path(base);
-  let dst_sig = paths::threat_feed_sig_path(base);
-  replace_file(&staging_bundle, &dst_bundle)?;
-  replace_file(&staging_sig, &dst_sig)?;
-
-  // Persist last-known-good after a successful import.
-  write_last_good(base, &dst_bundle, &dst_sig)?;
-
-  let st = FeedStatus {
-    installed: true,
-    verified: true,
-    version: Some(bundle.version),
-    installed_at_unix_ms: bundle_mtime_unix_ms(&dst_bundle),
-    checked_at_unix_ms: now_unix_ms(),
-    reason: None,
-  };
-  write_state(base, &st)?;
-  Ok(st)
-}
-
-fn current_version(base: &Path) -> Option<u64> {
-  let bundle_path = paths::threat_feed_bundle_path(base);
-  let sig_path = paths::threat_feed_sig_path(base);
-  let b = verify_files(&bundle_path, &sig_path).ok()?;
-  Some(b.version)
-}
-
-fn resolve_import_paths(
-  src_bundle: &Path,
-  src_sig: Option<&Path>,
-) -> anyhow::Result<(PathBuf, PathBuf)> {
-  if let Some(sig) = src_sig {
-    return Ok((src_bundle.to_path_buf(), sig.to_path_buf()));
-  }
-
-  if src_bundle.is_dir() {
-    let bundle = src_bundle.join("bundle.json");
-    let sig = src_bundle.join("bundle.sig");
-    return Ok((bundle, sig));
-  }
-
-  // If a file was provided, look for common signature sidecars.
-  let bundle = src_bundle.to_path_buf();
-  let sig1 = PathBuf::from(format!("{}.sig", bundle.display()));
-  if sig1.exists() {
-    return Ok((bundle, sig1));
-  }
-
-  if let Some(parent) = bundle.parent() {
-    let sig2 = parent.join("bundle.sig");
-    if sig2.exists() {
-      return Ok((bundle, sig2));
+  for rule in &bundle.rules {
+    if rule.rule_id.trim().is_empty() {
+      anyhow::bail!("rule_id must not be empty");
     }
   }
 
-  anyhow::bail!("signature path not provided and no adjacent signature file found");
-}
-
-fn replace_file(staging: &Path, dst: &Path) -> anyhow::Result<()> {
-  // Preserve last known good: do not delete the destination until the staged file is in place.
-  let bak = dst.with_extension("bak");
-  if bak.exists() {
-    let _ = fs::remove_file(&bak);
-  }
-
-  if dst.exists() {
-    fs::rename(dst, &bak).with_context(|| format!("backup {}", dst.display()))?;
-  }
-
-  match fs::rename(staging, dst) {
-    Ok(()) => {
-      if bak.exists() {
-        let _ = fs::remove_file(&bak);
-      }
-      Ok(())
-    }
-    Err(e) => {
-      // Attempt rollback.
-      if bak.exists() {
-        let _ = fs::rename(&bak, dst);
-      }
-      Err(e).with_context(|| format!("replace {}", dst.display()))
-    }
-  }?;
   Ok(())
+}
+
+fn decode_sig_file(sig_raw: &[u8]) -> anyhow::Result<Vec<u8>> {
+  if sig_raw.len() == 64 {
+    return Ok(sig_raw.to_vec());
+  }
+  let text = std::str::from_utf8(sig_raw).context("signature file must be raw bytes or UTF-8")?;
+  verify::decode_sig_base64url(text)
+}
+
+fn read_meta(base: &Path) -> BundleMeta {
+  let path = paths::threat_feed_meta_path(base);
+  let Ok(bytes) = fs::read(&path) else {
+    return BundleMeta::default();
+  };
+  serde_json::from_slice::<BundleMeta>(&bytes).unwrap_or_default()
+}
+
+fn write_meta(base: &Path, meta: &BundleMeta) -> anyhow::Result<()> {
+  let dir = paths::threat_feed_dir(base);
+  fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+  let bytes = serde_json::to_vec_pretty(meta)?;
+  atomic_write_file(&paths::threat_feed_meta_path(base), &bytes)
+}
+
+fn mark_verified(base: &Path) -> anyhow::Result<()> {
+  let now = now_unix_s();
+  let mut meta = read_meta(base);
+  meta.last_verified_at = Some(now);
+  write_meta(base, &meta)
+}
+
+fn last_good_bundle_path(base: &Path) -> PathBuf {
+  paths::threat_feed_dir(base).join("bundle.json.last-good")
+}
+
+fn last_good_sig_path(base: &Path) -> PathBuf {
+  paths::threat_feed_dir(base).join("bundle.sig.last-good")
+}
+
+fn write_last_good(base: &Path, bundle_json: &[u8], sig_raw: &[u8]) -> anyhow::Result<()> {
+  let dir = paths::threat_feed_dir(base);
+  fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+  atomic_write_file(&last_good_bundle_path(base), bundle_json)?;
+  atomic_write_file(&last_good_sig_path(base), sig_raw)?;
+  Ok(())
+}
+
+fn verify_last_good(base: &Path) -> anyhow::Result<ThreatFeedBundle> {
+  let b = last_good_bundle_path(base);
+  let s = last_good_sig_path(base);
+  verify_files(&b, &s)
+}
+
+fn atomic_write_file(dst: &Path, bytes: &[u8]) -> anyhow::Result<()> {
+  let dir = dst
+    .parent()
+    .ok_or_else(|| anyhow::anyhow!("destination has no parent directory"))?;
+  fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+
+  let tmp = tmp_path(dst);
+  fs::write(&tmp, bytes).with_context(|| format!("write {}", tmp.display()))?;
+  fs::rename(&tmp, dst).with_context(|| format!("rename {} -> {}", tmp.display(), dst.display()))?;
+  Ok(())
+}
+
+fn tmp_path(dst: &Path) -> PathBuf {
+  let name = dst.file_name().and_then(|s| s.to_str()).unwrap_or("tmp");
+  dst.with_file_name(format!(".{name}.tmp"))
 }
 
 fn write_state(base: &Path, st: &FeedStatus) -> anyhow::Result<()> {
   let dir = paths::threat_feed_dir(base);
   fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
   let path = paths::threat_feed_state_path(base);
+  let bundle = bundle_status_at(base);
 
   let content = format!(
-    "installed = {}\nverified = {}\nversion = {}\ninstalled_at_unix_ms = {}\nchecked_at_unix_ms = {}\nreason = {}\n",
+    "installed = {}\nverified = {}\nversion = {}\ninstalled_at_unix_ms = {}\nchecked_at_unix_ms = {}\nreason = {}\ncreated_at_unix_seconds = {}\nlast_verified_at_unix_seconds = {}\nlast_refresh_attempt_at_unix_seconds = {}\nlast_refresh_result = {}\n",
     st.installed,
     st.verified,
     toml_u64_or_null(st.version),
     toml_u64_or_null(st.installed_at_unix_ms),
     st.checked_at_unix_ms,
     toml_string_or_null(st.reason.as_deref()),
+    toml_u64_or_null(bundle.created_at),
+    toml_u64_or_null(bundle.verified_at),
+    toml_u64_or_null(bundle.last_refresh_attempt_at),
+    toml_string_or_null(bundle.last_refresh_result.as_deref()),
   );
 
-  fs::write(&path, content).with_context(|| format!("write {}", path.display()))?;
-  Ok(())
+  atomic_write_file(&path, content.as_bytes())
 }
 
 fn toml_string_or_null(v: Option<&str>) -> String {
@@ -282,31 +541,16 @@ fn toml_u64_or_null(v: Option<u64>) -> String {
   }
 }
 
-fn bundle_mtime_unix_ms(path: &Path) -> Option<u64> {
-  let meta = fs::metadata(path).ok()?;
-  let m = meta.modified().ok()?;
-  let dur = m.duration_since(std::time::UNIX_EPOCH).ok()?;
-  Some(dur.as_millis() as u64)
+fn short_error(e: &anyhow::Error) -> String {
+  let text = e.to_string();
+  let count = text.chars().count();
+  if count <= 180 {
+    return text;
+  }
+  let prefix: String = text.chars().take(180).collect();
+  format!("{prefix}...")
 }
 
-fn last_good_bundle_path(base: &Path) -> PathBuf {
-  paths::threat_feed_dir(base).join("bundle.json.last-good")
-}
-
-fn last_good_sig_path(base: &Path) -> PathBuf {
-  paths::threat_feed_dir(base).join("bundle.sig.last-good")
-}
-
-fn write_last_good(base: &Path, bundle: &Path, sig: &Path) -> anyhow::Result<()> {
-  let dir = paths::threat_feed_dir(base);
-  fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-  fs::copy(bundle, last_good_bundle_path(base)).context("write last-good bundle")?;
-  fs::copy(sig, last_good_sig_path(base)).context("write last-good sig")?;
-  Ok(())
-}
-
-fn verify_last_good(base: &Path) -> anyhow::Result<ThreatFeedBundle> {
-  let b = last_good_bundle_path(base);
-  let s = last_good_sig_path(base);
-  verify_files(&b, &s)
+fn now_unix_s() -> u64 {
+  now_unix_ms() / 1000
 }

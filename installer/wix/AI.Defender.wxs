@@ -7,8 +7,10 @@
   <Package
     Name="AI Defender"
     Manufacturer="(Publisher Placeholder)"
-    Version="0.1.0"
-    UpgradeCode="{2E5A5FE1-0BC1-4D6F-8B0B-61B7B3A5D6F1}">
+    Version="$(var.ProductVersion)"
+    UpgradeCode="{2E5A5FE1-0BC1-4D6F-8B0B-61B7B3A5D6F1}"
+    Scope="perMachine"
+    InstallPrivileges="elevated">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of AI Defender is already installed." />
 
@@ -44,41 +46,84 @@
         <Component Id="cmpTray" Guid="{6AA3F66B-0C10-4E2D-9C46-2C86B1B0B8A1}">
           <File Id="filTray" Source="$(var.SourceDir)\AI.Defender.Tray.exe" KeyPath="yes" />
           <File Id="filProductToml" Source="$(var.SourceDir)\PRODUCT.toml" />
-          <!-- Per-user autostart -->
+          <File Id="filVersionTxt" Source="$(var.SourceDir)\VERSION" />
+          <!-- Per-machine autostart at user logon -->
           <RegistryValue
-            Root="HKCU"
+            Root="HKLM"
             Key="Software\Microsoft\Windows\CurrentVersion\Run"
             Name="AI Defender"
             Value="&quot;[INSTALLFOLDER]AI.Defender.Tray.exe&quot;"
             Type="string"
             Action="write" />
         </Component>
+
       </Directory>
     </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="AI_DEFENDER_PDATA" Name="AI Defender">
+        <Component Id="cmpProgramDataRoot" Guid="{2B8808A6-0D4F-4E5A-A459-40B3B9B7A641}" Permanent="yes">
+          <CreateFolder />
+        </Component>
+        <Component
+          Id="cmpProgramDataDefaultConfig"
+          Guid="{A8D752A1-73A1-4CC5-9A69-83F62D53D3EF}"
+          Permanent="yes"
+          NeverOverwrite="yes">
+          <File
+            Id="filProgramDataDefaultConfig"
+            Source="$(var.SourceDir)\config.default.toml"
+            Name="config.toml"
+            KeyPath="yes" />
+        </Component>
+        <Directory Id="AI_DEFENDER_LOGS" Name="logs">
+          <Component Id="cmpProgramDataLogs" Guid="{1579D8BF-D7F6-4E37-9CE3-EA9B4B560AAA}" Permanent="yes">
+            <CreateFolder />
+          </Component>
+        </Directory>
+        <Directory Id="AI_DEFENDER_THREAT_FEED" Name="threat-feed">
+          <Component Id="cmpProgramDataThreatFeed" Guid="{AFCFA6BA-9EDB-409E-9E0A-4FA069D065D2}" Permanent="yes">
+            <CreateFolder />
+          </Component>
+        </Directory>
+        <Directory Id="AI_DEFENDER_LICENSE" Name="license">
+          <Component Id="cmpProgramDataLicense" Guid="{11F3A1CC-5B1A-4D2D-BE44-F7036B73412A}" Permanent="yes">
+            <CreateFolder />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Property Id="REMOVE_PROGRAMDATA" Value="0" />
 
     <Feature Id="featMain" Title="AI Defender" Level="1">
       <ComponentRef Id="cmpAgent" />
       <ComponentRef Id="cmpScanner" />
       <ComponentRef Id="cmpTray" />
+      <ComponentRef Id="cmpProgramDataRoot" />
+      <ComponentRef Id="cmpProgramDataDefaultConfig" />
+      <ComponentRef Id="cmpProgramDataLogs" />
+      <ComponentRef Id="cmpProgramDataThreatFeed" />
+      <ComponentRef Id="cmpProgramDataLicense" />
     </Feature>
 
-    <!-- Uninstall cleanup: remove only AI Defender kill switch rules. -->
+    <!-- Uninstall cleanup: remove only AI Defender kill switch rules by group. -->
     <CustomAction
-      Id="caRemoveFirewallOut"
+      Id="caRemoveFirewallRulesByGroup"
       Execute="deferred"
       Return="ignore"
       Impersonate="no"
-      ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule name=&quot;AI Defender KillSwitch Outbound&quot; group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
+      ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
     <CustomAction
-      Id="caRemoveFirewallIn"
+      Id="caRemoveProgramData"
       Execute="deferred"
       Return="ignore"
       Impersonate="no"
-      ExeCommand="cmd.exe /c netsh advfirewall firewall delete rule name=&quot;AI Defender KillSwitch Inbound&quot; group=&quot;AI_DEFENDER_KILLSWITCH&quot;" />
+      ExeCommand="cmd.exe /c if exist &quot;[CommonAppDataFolder]AI Defender&quot; rmdir /s /q &quot;[CommonAppDataFolder]AI Defender&quot;" />
 
     <InstallExecuteSequence>
-      <Custom Action="caRemoveFirewallOut" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
-      <Custom Action="caRemoveFirewallIn" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="caRemoveFirewallRulesByGroup" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="caRemoveProgramData" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND REMOVE_PROGRAMDATA = &quot;1&quot;" />
     </InstallExecuteSequence>
   </Package>
 </Wix>

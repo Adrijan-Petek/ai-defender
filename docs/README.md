@@ -6,7 +6,9 @@ See also:
 - `docs/LEARNING_VS_STRICT.md`
 - `docs/SYSMON.md`
 - `docs/RECOVERY.md`
+- `docs/INSTALLER.md`
 - `docs/INSTALLATION.md`
+- `docs/PRO_MODE.md`
 - `docs/SCANNING.md`
 - `docs/PRIVACY.md`
 - `docs/UNINSTALL.md`

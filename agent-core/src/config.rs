@@ -10,6 +10,7 @@ pub struct Config {
   pub killswitch: KillSwitchConfig,
   pub allowlist: AllowlistConfig,
   pub protected: ProtectedConfig,
+  pub threat_feed: ThreatFeedConfig,
 }
 
 impl Default for Config {
@@ -21,6 +22,7 @@ impl Default for Config {
       killswitch: KillSwitchConfig::default(),
       allowlist: AllowlistConfig::default(),
       protected: ProtectedConfig::default(),
+      threat_feed: ThreatFeedConfig::default(),
     }
   }
 }
@@ -116,6 +118,36 @@ impl Default for ProtectedConfig {
   }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreatFeedConfig {
+  #[serde(default)]
+  pub auto_refresh: bool,
+
+  #[serde(default = "default_refresh_interval_minutes")]
+  pub refresh_interval_minutes: u64,
+
+  #[serde(default = "default_threat_feed_endpoints")]
+  pub endpoints: Vec<String>,
+
+  #[serde(default = "default_threat_feed_allowlist_domains")]
+  pub allowlist_domains: Vec<String>,
+
+  #[serde(default = "default_threat_feed_timeout_seconds")]
+  pub timeout_seconds: u64,
+}
+
+impl Default for ThreatFeedConfig {
+  fn default() -> Self {
+    Self {
+      auto_refresh: false,
+      refresh_interval_minutes: default_refresh_interval_minutes(),
+      endpoints: default_threat_feed_endpoints(),
+      allowlist_domains: default_threat_feed_allowlist_domains(),
+      timeout_seconds: default_threat_feed_timeout_seconds(),
+    }
+  }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LegacySafetyConfig {
   #[serde(default)]
@@ -132,6 +164,22 @@ fn default_failsafe_minutes() -> u64 {
 
 fn default_correlation_window_seconds() -> u64 {
   120
+}
+
+fn default_refresh_interval_minutes() -> u64 {
+  60
+}
+
+fn default_threat_feed_endpoints() -> Vec<String> {
+  vec!["https://updates.aidefender.shop/feed/".to_string()]
+}
+
+fn default_threat_feed_allowlist_domains() -> Vec<String> {
+  vec!["updates.aidefender.shop".to_string()]
+}
+
+fn default_threat_feed_timeout_seconds() -> u64 {
+  10
 }
 
 fn default_allowlist_publishers() -> Vec<String> {
@@ -178,6 +226,9 @@ struct ConfigFile {
   #[serde(default)]
   pub protected: Option<ProtectedConfig>,
 
+  #[serde(default)]
+  pub threat_feed: Option<ThreatFeedConfig>,
+
   // Back-compat: old configs had `[safety] strict_mode = true|false`.
   #[serde(default)]
   pub safety: Option<LegacySafetyConfig>,
@@ -221,6 +272,18 @@ impl ConfigFile {
     if let Some(p) = self.protected {
       cfg.protected = p;
     }
+    if let Some(tf) = self.threat_feed {
+      cfg.threat_feed = tf;
+    }
+
+    if let Some(reason) = validate_threat_feed_config(&cfg.threat_feed) {
+      cfg.threat_feed.auto_refresh = false;
+      tracing::warn!(
+        reason = %reason,
+        "threat_feed config invalid; auto refresh disabled"
+      );
+    }
+
     cfg
   }
 
@@ -231,6 +294,7 @@ impl ConfigFile {
       || self.killswitch.is_none()
       || self.allowlist.is_none()
       || self.protected.is_none()
+      || self.threat_feed.is_none()
   }
 }
 
@@ -295,6 +359,7 @@ fn to_config_file(cfg: &Config) -> ConfigFile {
     killswitch: Some(cfg.killswitch.clone()),
     allowlist: Some(cfg.allowlist.clone()),
     protected: Some(cfg.protected.clone()),
+    threat_feed: Some(cfg.threat_feed.clone()),
     safety: None,
     failsafe_minutes: None,
   }
@@ -312,4 +377,36 @@ fn write_atomic(path: &Path, contents: &str) -> anyhow::Result<()> {
   fs::write(&tmp, contents)?;
   fs::rename(&tmp, path)?;
   Ok(())
+}
+
+fn validate_threat_feed_config(cfg: &ThreatFeedConfig) -> Option<String> {
+  if cfg.refresh_interval_minutes == 0 {
+    return Some("refresh_interval_minutes must be > 0".to_string());
+  }
+  if cfg.timeout_seconds == 0 {
+    return Some("timeout_seconds must be > 0".to_string());
+  }
+  if cfg.endpoints.is_empty() {
+    return Some("endpoints must not be empty".to_string());
+  }
+  if cfg.allowlist_domains.is_empty() {
+    return Some("allowlist_domains must not be empty".to_string());
+  }
+
+  for endpoint in &cfg.endpoints {
+    let Ok(url) = reqwest::Url::parse(endpoint) else {
+      return Some(format!("invalid endpoint URL: {endpoint}"));
+    };
+    if url.scheme() != "https" {
+      return Some(format!("endpoint must use HTTPS: {endpoint}"));
+    }
+    let Some(host) = url.host_str() else {
+      return Some(format!("endpoint has no host: {endpoint}"));
+    };
+    if !cfg.allowlist_domains.iter().any(|d| d == host) {
+      return Some(format!("endpoint host not allowlisted: {host}"));
+    }
+  }
+
+  None
 }

@@ -95,14 +95,13 @@ internal sealed class TrayAppContext : ApplicationContext
 
       _snapshot = new AgentStatusSnapshot(
         AgentRunning: agentRunning,
+        ServiceState: service,
         Mode: cfg?.Mode ?? AgentMode.Unknown,
         KillSwitchEnabled: kill?.Enabled == true,
         LastIncidentSummary: last,
         ServiceDetail: serviceDetail);
 
       var (tooltip, badge) = ComputeTrayPresentation(_snapshot);
-
-      // Keep tooltip short (Windows limits NotifyIcon.Text).
       _notifyIcon.Text = tooltip.Length > 60 ? tooltip[..60] : tooltip;
 
       ApplyMenuState(_snapshot);
@@ -112,9 +111,10 @@ internal sealed class TrayAppContext : ApplicationContext
     {
       _snapshot = AgentStatusSnapshot.Empty with
       {
+        ServiceState = null,
         ServiceDetail = "Status refresh failed unexpectedly."
       };
-      _notifyIcon.Text = "⚠️ Agent Not Running";
+      _notifyIcon.Text = "Agent Not Running";
       ApplyMenuState(_snapshot);
       SetIconBadge(IconFactory.Badge.Gray);
     }
@@ -122,37 +122,48 @@ internal sealed class TrayAppContext : ApplicationContext
 
   private static (string Tooltip, IconFactory.Badge Badge) ComputeTrayPresentation(AgentStatusSnapshot s)
   {
+    if (IsServiceTransitioning(s.ServiceState))
+    {
+      return ("Agent Service Restarting", IconFactory.Badge.Gray);
+    }
+
     if (!s.AgentRunning)
     {
-      return ("⚠️ Agent Not Running", IconFactory.Badge.Gray);
+      return ("Agent Not Running", IconFactory.Badge.Gray);
     }
 
     if (s.KillSwitchEnabled)
     {
-      return ("🔴 Network Locked — Kill Switch Active", IconFactory.Badge.Red);
+      return ("Network Locked - Kill Switch Active", IconFactory.Badge.Red);
     }
 
     var mode = s.Mode == AgentMode.Unknown ? AgentMode.Learning : s.Mode;
     return mode switch
     {
-      AgentMode.Strict => ("🔵 Strict Mode — Auto Response Enabled", IconFactory.Badge.Blue),
-      _ => ("🟢 Learning Mode — Monitoring Only", IconFactory.Badge.Green)
+      AgentMode.Strict => ("Strict Mode - Auto Response Enabled", IconFactory.Badge.Blue),
+      _ => ("Learning Mode - Monitoring Only", IconFactory.Badge.Green)
     };
   }
 
   private void ApplyMenuState(AgentStatusSnapshot s)
   {
     var cliAvailable = AgentCli.IsAvailable();
+    var transitioning = IsServiceTransitioning(s.ServiceState);
 
-    // Destructive actions are disabled when the agent service is not running.
-    _lockNowItem.Enabled = s.AgentRunning && cliAvailable;
-    _toggleModeItem.Enabled = s.AgentRunning;
+    _lockNowItem.Enabled = s.AgentRunning && cliAvailable && !transitioning;
+    _toggleModeItem.Enabled = s.AgentRunning && !transitioning;
 
-    // Restore is safe and useful even when the service is down (e.g., if the machine is locked),
-    // as long as the local CLI is available.
-    _restoreItem.Enabled = cliAvailable && (!s.AgentRunning || s.KillSwitchEnabled);
+    _restoreItem.Enabled = cliAvailable && !transitioning && (!s.AgentRunning || s.KillSwitchEnabled);
 
     _lastIncidentItem.Enabled = true;
+  }
+
+  private static bool IsServiceTransitioning(ServiceControllerStatus? status)
+  {
+    return status is ServiceControllerStatus.StartPending
+      or ServiceControllerStatus.StopPending
+      or ServiceControllerStatus.ContinuePending
+      or ServiceControllerStatus.PausePending;
   }
 
   private void SetIconBadge(IconFactory.Badge badge)
@@ -207,13 +218,13 @@ internal sealed class TrayAppContext : ApplicationContext
     }
 
     var next = cfg.Mode == AgentMode.Learning ? AgentMode.Strict : AgentMode.Learning;
-    var title = "AI Defender — Change Mode";
+    var title = "AI Defender - Change Mode";
     var body = next == AgentMode.Strict
       ? "Switch to Strict mode?\n\n" +
-        "Strict mode enables automatic response for RED incidents, which may include enabling the kill switch (network lock).\n\n" +
+        "Strict mode may trigger automatic response for high-confidence RED incidents. This can include network lock (kill switch).\n\n" +
         "Proceed?"
       : "Switch back to Learning mode?\n\n" +
-        "Learning mode monitors and records incidents but does not auto-trigger the kill switch.\n\n" +
+        "Learning mode monitors and records incidents, and does not auto-trigger the kill switch.\n\n" +
         "Proceed?";
 
     var icon = next == AgentMode.Strict ? MessageBoxIcon.Warning : MessageBoxIcon.Question;
@@ -232,7 +243,7 @@ internal sealed class TrayAppContext : ApplicationContext
     var restart = MessageBox.Show(
       "Mode updated in config. Restart the AI Defender service to apply now?\n\n" +
       "If you choose No, it will apply on next service restart/reboot.",
-      "AI Defender — Restart Service",
+      "AI Defender - Restart Service",
       MessageBoxButtons.YesNo,
       MessageBoxIcon.Question);
 
@@ -261,7 +272,7 @@ internal sealed class TrayAppContext : ApplicationContext
     {
       MessageBox.Show(
         "Unable to restart the service automatically (may require Administrator privileges).\n\n" +
-        "You can restart it from the Services app (services.msc) or reboot.",
+        "You can restart it from Services (services.msc) or reboot.",
         "AI Defender",
         MessageBoxButtons.OK,
         MessageBoxIcon.Information);
@@ -281,11 +292,11 @@ internal sealed class TrayAppContext : ApplicationContext
     }
 
     var msg =
-      "Enable the kill switch now?\n\n" +
-      "This immediately blocks ALL inbound and outbound network traffic using Windows Firewall.\n\n" +
+      "Enable kill switch now?\n\n" +
+      "This immediately blocks all inbound and outbound network traffic using Windows Firewall.\n\n" +
       "Proceed?";
 
-    var res = MessageBox.Show(msg, "AI Defender — Enable Kill Switch", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+    var res = MessageBox.Show(msg, "AI Defender - Enable Kill Switch", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
     if (res != DialogResult.Yes)
     {
       return;
@@ -296,7 +307,7 @@ internal sealed class TrayAppContext : ApplicationContext
     {
       MessageBox.Show(
         r.UserMessage,
-        "AI Defender — Action Failed",
+        "AI Defender - Action Failed",
         MessageBoxButtons.OK,
         MessageBoxIcon.Error);
       return;
@@ -307,8 +318,8 @@ internal sealed class TrayAppContext : ApplicationContext
     if (!_snapshot.KillSwitchEnabled)
     {
       MessageBox.Show(
-        "Kill switch command completed, but the UI could not confirm the locked state.\n\n" +
-        "Open Status to verify or use the recovery steps in docs.",
+        "Kill switch command completed, but the UI could not confirm lock state.\n\n" +
+        "Open Status to verify or use recovery steps.",
         "AI Defender",
         MessageBoxButtons.OK,
         MessageBoxIcon.Warning);
@@ -317,7 +328,7 @@ internal sealed class TrayAppContext : ApplicationContext
 
     MessageBox.Show(
       "Network locked. You can restore networking via the tray menu.",
-      "AI Defender — Network Locked",
+      "AI Defender - Network Locked",
       MessageBoxButtons.OK,
       MessageBoxIcon.Information);
   }
@@ -345,8 +356,8 @@ internal sealed class TrayAppContext : ApplicationContext
     }
 
     var res = MessageBox.Show(
-      "Restore network access by disabling the AI Defender kill switch rules?",
-      "AI Defender — Restore Network",
+      "Restore network access by removing AI Defender kill switch firewall rules?",
+      "AI Defender - Restore Network",
       MessageBoxButtons.YesNo,
       MessageBoxIcon.Question);
 
@@ -360,7 +371,7 @@ internal sealed class TrayAppContext : ApplicationContext
     {
       MessageBox.Show(
         r.UserMessage,
-        "AI Defender — Action Failed",
+        "AI Defender - Action Failed",
         MessageBoxButtons.OK,
         MessageBoxIcon.Error);
       return;
@@ -372,7 +383,7 @@ internal sealed class TrayAppContext : ApplicationContext
     {
       MessageBox.Show(
         "Restore command completed, but the UI could not confirm that networking is restored.\n\n" +
-        "Open Status to verify or use the recovery steps in docs.",
+        "Open Status to verify or use recovery steps.",
         "AI Defender",
         MessageBoxButtons.OK,
         MessageBoxIcon.Warning);
@@ -381,14 +392,13 @@ internal sealed class TrayAppContext : ApplicationContext
 
     MessageBox.Show(
       "Networking should be restored.",
-      "AI Defender — Network Restored",
+      "AI Defender - Network Restored",
       MessageBoxButtons.OK,
       MessageBoxIcon.Information);
   }
 
   private static void WaitForKillSwitchState(bool expectedEnabled)
   {
-    // Best-effort: state file updates should be near-instant, but avoid assuming success.
     var sw = Stopwatch.StartNew();
     while (sw.ElapsedMilliseconds < 2_000)
     {
@@ -437,6 +447,7 @@ internal sealed class TrayAppContext : ApplicationContext
 
 internal sealed record AgentStatusSnapshot(
   bool AgentRunning,
+  ServiceControllerStatus? ServiceState,
   AgentMode Mode,
   bool KillSwitchEnabled,
   IncidentSummary? LastIncidentSummary,
@@ -444,6 +455,7 @@ internal sealed record AgentStatusSnapshot(
 {
   public static AgentStatusSnapshot Empty => new(
     AgentRunning: false,
+    ServiceState: null,
     Mode: AgentMode.Unknown,
     KillSwitchEnabled: false,
     LastIncidentSummary: null,

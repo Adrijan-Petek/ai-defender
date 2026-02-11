@@ -4,7 +4,7 @@ internal static class ProductInfo
 {
   private const string DefaultName = "AI Defender";
   private const string DefaultServiceName = "AI_DEFENDER_AGENT";
-  private const string DefaultVersion = "0.1.0";
+  private const string DefaultVersion = "0.1.1-alpha";
 
   public static string Name => Load().Name;
   public static string ServiceName => Load().ServiceName;
@@ -27,6 +27,18 @@ internal static class ProductInfo
       {
         var text = File.ReadAllText(path);
         identity = Parse(text, identity);
+      }
+      else
+      {
+        var versionPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "VERSION"));
+        if (File.Exists(versionPath))
+        {
+          var version = File.ReadAllText(versionPath).Trim();
+          if (!string.IsNullOrWhiteSpace(version))
+          {
+            identity = identity with { Version = version };
+          }
+        }
       }
     }
     catch

@@ -1,10 +1,12 @@
+using System.ServiceProcess;
+
 namespace AI.Defender.Tray;
 
 internal sealed class StatusDialog : Form
 {
   public StatusDialog(AgentStatusSnapshot snapshot)
   {
-    Text = "AI Defender — Status";
+    Text = "AI Defender - Status";
     Icon = IconFactory.CreateWindowIcon();
     StartPosition = FormStartPosition.CenterScreen;
     FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -120,6 +122,20 @@ internal sealed class StatusDialog : Form
       lines.Add(
         $"Threat feed updated: {TryFormatLocalTime(feed.InstalledAtUnixMs.Value) ?? $"unix_ms={feed.InstalledAtUnixMs.Value}"}");
     }
+    if (feed?.LastVerifiedAtUnixMs is not null)
+    {
+      lines.Add(
+        $"Threat feed last verified: {TryFormatLocalTime(feed.LastVerifiedAtUnixMs.Value) ?? $"unix_ms={feed.LastVerifiedAtUnixMs.Value}"}");
+    }
+    if (feed?.LastRefreshAttemptAtUnixMs is not null)
+    {
+      lines.Add(
+        $"Threat feed last refresh attempt: {TryFormatLocalTime(feed.LastRefreshAttemptAtUnixMs.Value) ?? $"unix_ms={feed.LastRefreshAttemptAtUnixMs.Value}"}");
+    }
+    if (!string.IsNullOrWhiteSpace(feed?.LastRefreshResult))
+    {
+      lines.Add($"Threat feed last refresh result: {feed.LastRefreshResult}");
+    }
 
     if (serviceDetail is not null)
     {
@@ -134,20 +150,28 @@ internal sealed class StatusDialog : Form
 
   private static string ComputeStateLine(AgentStatusSnapshot s)
   {
+    if (s.ServiceState is ServiceControllerStatus.StartPending
+      or ServiceControllerStatus.StopPending
+      or ServiceControllerStatus.ContinuePending
+      or ServiceControllerStatus.PausePending)
+    {
+      return "Agent Service Restarting";
+    }
+
     if (!s.AgentRunning)
     {
-      return "⚠️ Agent Not Running";
+      return "Agent Not Running";
     }
 
     if (s.KillSwitchEnabled)
     {
-      return "🔴 Network Locked — Kill Switch Active";
+      return "Network Locked - Kill Switch Active";
     }
 
     var mode = s.Mode == AgentMode.Unknown ? AgentMode.Learning : s.Mode;
     return mode == AgentMode.Strict
-      ? "🔵 Strict Mode — Auto Response Enabled"
-      : "🟢 Learning Mode — Monitoring Only";
+      ? "Strict Mode - Auto Response Enabled"
+      : "Learning Mode - Monitoring Only";
   }
 
   private static string FormatIncidentOneLine(IncidentSummary inc)

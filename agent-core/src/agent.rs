@@ -1,8 +1,10 @@
 use crate::config::Config;
 use crate::event_collector;
 use crate::kill_switch;
+use crate::paths;
 use crate::response_engine;
 use crate::rules_engine;
+use crate::threat_feed;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -30,6 +32,9 @@ impl Agent {
       "agent main loop started"
     );
 
+    let base = paths::base_dir()?;
+    let mut refresh_scheduler = threat_feed::AutoRefreshScheduler::new(&cfg, &base);
+
     let mut engine = rules_engine::Engine::new();
 
     loop {
@@ -38,6 +43,7 @@ impl Agent {
       }
 
       let _ = kill_switch::poll_failsafe();
+      refresh_scheduler.tick(&cfg, &base);
 
       let events = event_collector::collect_once()?;
       if events.is_empty() {

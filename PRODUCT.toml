@@ -1,5 +1,4 @@
 name = "AI Defender"
 service_name = "AI_DEFENDER_AGENT"
 publisher = "(Publisher Placeholder)"
-version = "0.1.0"
-
+version = "0.1.1-alpha"

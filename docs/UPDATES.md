@@ -1,28 +1,68 @@
-# Updates (safe MVP architecture)
+# Updates (Threat Feed)
 
-AI Defender must never update itself silently.
+AI Defender does not silently self-update its binaries.
 
-## Principles
+Only signed threat-feed bundles are refreshed, and only under explicit conditions.
 
-- The agent (`AI_DEFENDER_AGENT`) does **not** auto-update itself.
-- Updates require explicit user approval.
-- Update packages must be signed and verifiable offline.
-- Network access is optional and user-initiated (e.g., “Check for updates”).
+## Default endpoint readiness
 
-## Suggested MVP design (no implementation yet)
+Default threat-feed endpoint:
 
-1) **Separate updater component** (runs per-user from the tray UI).
-2) Updater downloads an update package only after user confirms.
-3) Package format:
-   - includes `agent-core.exe`, `scanner.exe`, `AI.Defender.Tray.exe`, `PRODUCT.toml`
-   - includes a signed manifest (publisher cert)
-4) Validation:
-   - verify signature before applying
-   - verify version monotonicity (no downgrade without explicit override)
-5) Apply:
-   - stop service
-   - replace binaries atomically
-   - start service
+- `https://updates.aidefender.shop/feed/`
 
-If validation fails, nothing is applied and the user is shown a clear error.
+Strict controls:
 
+- HTTPS required
+- Exact host allowlist match (`updates.aidefender.shop`)
+- Redirects disabled
+- Size limits:
+  - `bundle.json` <= 2 MB
+  - `bundle.sig` <= 8 KB
+
+## Eligibility and opt-in
+
+Auto-refresh runs only when all are true:
+
+1. License status is `ProActive`
+2. `threat_feed.auto_refresh = true`
+3. Threat-feed config passes validation
+
+Community mode never fetches threat-feed updates.
+
+## Privacy model
+
+Threat-feed refresh downloads only:
+
+- `bundle.json`
+- `bundle.sig`
+
+It does not send:
+
+- license key
+- device identifier
+- incident data
+- telemetry payloads
+
+## Verification and install policy
+
+Downloaded bundles must pass:
+
+- Ed25519 signature verification
+- schema validation
+- version compatibility checks
+
+Install is atomic. If any step fails:
+
+- current bundle remains in place
+- last-known-good remains available
+- refresh failure is logged with a short reason
+
+## Offline operation
+
+Manual import remains available and supported:
+
+```powershell
+agent-core.exe --console --feed import C:\path\bundle.json C:\path\bundle.sig
+```
+
+This guarantees offline usability even when update endpoints are unavailable.

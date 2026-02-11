@@ -1,4 +1,5 @@
 # AI Defender
+![CI](https://github.com/Adrijan-Petek/ai-defender/actions/workflows/ci.yml/badge.svg)
 
 <p align="center">
   <img src="assets/ai-defender.png" alt="AI Defender logo" width="120" />

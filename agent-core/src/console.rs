@@ -36,7 +36,7 @@ pub fn run_console_command(cfg: &Config, args: &[String]) -> anyhow::Result<Cons
   }
 
   if let Some(i) = args.iter().position(|a| a == "--feed") {
-    return run_feed(&args[i + 1..]);
+    return run_feed(cfg, &args[i + 1..]);
   }
 
   Ok(ConsoleAction::RunAgent)
@@ -190,43 +190,46 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
   }
 }
 
-fn run_feed(tail: &[String]) -> anyhow::Result<ConsoleAction> {
+fn run_feed(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> {
   let base = paths::base_dir()?;
 
   let sub = tail.first().map(|s| s.as_str()).unwrap_or("");
   match sub {
     "status" => {
-      let st = threat_feed::status(&base);
-      if !st.installed {
+      let st = threat_feed::bundle_status_at(&base);
+      if !st.present {
         println!("Threat feed: not installed");
-        if let Some(r) = st.reason {
-          println!("Reason: {r}");
-        }
         return Ok(ConsoleAction::ExitOk);
       }
 
       println!("Threat feed: installed");
-      println!("Verified: {}", st.verified);
-      if let Some(v) = st.version {
-        println!("Version: {v}");
+      if let Some(v) = st.rules_version {
+        println!("Rules version: {v}");
       }
-      if let Some(ts) = st.installed_at_unix_ms {
-        println!("Installed at (unix ms): {ts}");
+      if let Some(ts) = st.created_at {
+        println!("Created at (unix seconds): {ts}");
       }
-      if let Some(r) = st.reason {
-        println!("Note: {r}");
+      if let Some(ts) = st.verified_at {
+        println!("Verified at (unix seconds): {ts}");
+      }
+      if let Some(ts) = st.last_refresh_attempt_at {
+        println!("Last refresh attempt (unix seconds): {ts}");
+      }
+      if let Some(result) = st.last_refresh_result {
+        println!("Last refresh result: {result}");
       }
       Ok(ConsoleAction::ExitOk)
     }
     "import" => {
-      let p = tail.get(1).map(|s| s.as_str()).unwrap_or("");
-      if p.is_empty() {
-        anyhow::bail!("expected: --feed import <path-to-bundle-or-directory>");
+      let b = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      let s = tail.get(2).map(|s| s.as_str()).unwrap_or("");
+      if b.is_empty() || s.is_empty() {
+        anyhow::bail!("expected: --feed import <path-to-bundle.json> <path-to-bundle.sig>");
       }
-      let st = threat_feed::import(&base, std::path::Path::new(p), None)?;
+      let st = threat_feed::import(&base, std::path::Path::new(b), std::path::Path::new(s))?;
       println!("Imported threat feed bundle.");
-      if let Some(v) = st.version {
-        println!("Version: {v}");
+      if let Some(v) = st.rules_version {
+        println!("Rules version: {v}");
       }
       Ok(ConsoleAction::ExitOk)
     }
@@ -234,17 +237,57 @@ fn run_feed(tail: &[String]) -> anyhow::Result<ConsoleAction> {
       let b = tail.get(1).map(|s| s.as_str()).unwrap_or("");
       let s = tail.get(2).map(|s| s.as_str()).unwrap_or("");
       if b.is_empty() || s.is_empty() {
-        anyhow::bail!("expected: --feed verify <path-to-bundle> <path-to-sig>");
+        anyhow::bail!("expected: --feed verify <path-to-bundle.json> <path-to-bundle.sig>");
       }
       let bundle = threat_feed::verify_files(std::path::Path::new(b), std::path::Path::new(s))?;
       println!("Threat feed bundle verified.");
-      println!("Version: {}", bundle.version);
-      println!("Created at (unix ms): {}", bundle.created_at_unix_ms);
+      println!("Bundle schema version: {}", bundle.version);
+      println!("Rules version: {}", bundle.rules_version);
+      println!("Created at (unix seconds): {}", bundle.created_at);
+      Ok(ConsoleAction::ExitOk)
+    }
+    "refresh-now" => {
+      let res = threat_feed::refresh_now(cfg, &base);
+      if !res.attempted {
+        println!("{}", res.reason);
+        return Ok(ConsoleAction::ExitOk);
+      }
+      if res.success {
+        println!("Threat feed refresh completed successfully.");
+      } else {
+        println!("Threat feed refresh failed: {}", res.reason);
+      }
+      Ok(ConsoleAction::ExitOk)
+    }
+    "auto-refresh" => {
+      let nested = tail.get(1).map(|s| s.as_str()).unwrap_or("");
+      if nested != "status" {
+        anyhow::bail!("expected: --feed auto-refresh status");
+      }
+      let st = threat_feed::auto_refresh_status(cfg, &base);
+      println!(
+        "Auto refresh: {}",
+        if st.enabled { "enabled" } else { "disabled" }
+      );
+      println!("Interval minutes: {}", st.interval_minutes);
+      println!(
+        "Eligible now: {}",
+        if st.eligible { "yes" } else { "no" }
+      );
+      println!("Reason: {}", st.reason);
+      match st.last_attempt_at {
+        Some(ts) => println!("Last attempt (unix seconds): {ts}"),
+        None => println!("Last attempt: none"),
+      }
+      match st.last_result {
+        Some(v) => println!("Last result: {v}"),
+        None => println!("Last result: none"),
+      }
       Ok(ConsoleAction::ExitOk)
     }
     _ => {
       eprintln!(
-        "Unknown `--feed` subcommand. Expected: status|import <path>|verify <bundle> <sig>"
+        "Unknown `--feed` subcommand. Expected: status|import <bundle.json> <bundle.sig>|verify <bundle.json> <bundle.sig>|refresh-now|auto-refresh status"
       );
       print_help();
       Ok(ConsoleAction::ExitOk)
@@ -525,7 +568,7 @@ fn strip_console_flag(args: &[String]) -> Vec<String> {
 }
 
 fn print_help() {
-  println!("AI Defender (console mode)");
+  println!("AI Defender v{} (console mode)", env!("CARGO_PKG_VERSION"));
   println!("Commands:");
   println!("  --killswitch on");
   println!("  --killswitch off");
@@ -536,8 +579,10 @@ fn print_help() {
   println!("  --license activate");
   println!("  --license deactivate");
   println!("  --feed status");
-  println!("  --feed import <path-to-bundle-or-directory>");
-  println!("  --feed verify <path-to-bundle> <path-to-sig>");
+  println!("  --feed import <path-to-bundle.json> <path-to-bundle.sig>");
+  println!("  --feed verify <path-to-bundle.json> <path-to-bundle.sig>");
+  println!("  --feed refresh-now");
+  println!("  --feed auto-refresh status");
   println!("  --simulate red");
   println!("  --simulate file-access-chrome");
   println!("  --simulate net-connect");

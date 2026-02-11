@@ -1,0 +1,53 @@
+name: Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install WiX v4 CLI
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          pwsh -File installer/build.ps1
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-defender-msi
+          path: installer/build/*.msi
+          if-no-files-found: error
+
+      - name: Upload staged payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-defender-installer-stage
+          path: |
+            installer/build/agent-core.exe
+            installer/build/scanner.exe
+            installer/build/AI.Defender.Tray.exe
+            installer/build/VERSION
+            installer/build/PRODUCT.toml
+            installer/build/config.default.toml
+          if-no-files-found: error
