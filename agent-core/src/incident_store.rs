@@ -1,4 +1,5 @@
 use crate::paths;
+use crate::runtime;
 use crate::types::{Incident, Severity};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,9 +7,19 @@ use std::path::{Path, PathBuf};
 pub fn store_incident(incident: &Incident) -> anyhow::Result<PathBuf> {
   let base = paths::base_dir()?;
   let dir = paths::incidents_dir(&base);
+  let file_path = dir.join(format!("{}.toml", incident.incident_id));
+
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      incident_id = %incident.incident_id,
+      severity = ?incident.severity,
+      "DRY-RUN: would store incident record"
+    );
+    return Ok(file_path);
+  }
+
   fs::create_dir_all(&dir)?;
 
-  let file_path = dir.join(format!("{}.toml", incident.incident_id));
   let raw = toml::to_string_pretty(incident)?;
   write_atomic(&file_path, &raw)?;
   Ok(file_path)

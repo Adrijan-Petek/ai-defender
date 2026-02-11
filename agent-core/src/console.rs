@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::incident_store;
 use crate::kill_switch;
+use crate::runtime;
 use crate::types::{now_unix_ms, Event, FileAccessType};
 use crate::{license, paths, threat_feed};
 use std::sync::mpsc;
@@ -55,6 +56,12 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
         print_admin_hint(&e);
         return Err(e);
       }
+      if runtime::is_dry_run() {
+        println!(
+          "DRY-RUN: would enable firewall kill switch (group AI_DEFENDER_KILLSWITCH)."
+        );
+        return Ok(ConsoleAction::ExitOk);
+      }
       tracing::warn!(
         group = kill_switch::FIREWALL_RULE_GROUP,
         "manual kill switch enabled"
@@ -66,6 +73,12 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
       if let Err(e) = kill_switch::disable_with_reason("manual_cli", None) {
         print_admin_hint(&e);
         return Err(e);
+      }
+      if runtime::is_dry_run() {
+        println!(
+          "DRY-RUN: would remove firewall rules (group AI_DEFENDER_KILLSWITCH)."
+        );
+        return Ok(ConsoleAction::ExitOk);
       }
       tracing::info!(
         group = kill_switch::FIREWALL_RULE_GROUP,
@@ -92,6 +105,10 @@ fn run_killswitch(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction
       if let Err(e) = kill_switch::set_keep_locked(keep_locked) {
         print_admin_hint(&e);
         return Err(e);
+      }
+      if runtime::is_dry_run() {
+        println!("DRY-RUN: would set keep_locked to {keep_locked}.");
+        return Ok(ConsoleAction::ExitOk);
       }
       println!("keep_locked set to {keep_locked}.");
       Ok(ConsoleAction::ExitOk)
@@ -151,6 +168,10 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
       }
       let st =
         license::install_license(&base, std::path::Path::new(json), std::path::Path::new(sig))?;
+      if runtime::is_dry_run() {
+        println!("DRY-RUN: would install license.");
+        return Ok(ConsoleAction::ExitOk);
+      }
       println!(
         "Installed license. Status: {}",
         match st.state {
@@ -164,6 +185,10 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
     }
     "activate" => {
       let st = license::activate(&base)?;
+      if runtime::is_dry_run() {
+        println!("DRY-RUN: would activate license on this device.");
+        return Ok(ConsoleAction::ExitOk);
+      }
       println!(
         "Activation complete. Status: {}",
         match st.state {
@@ -177,6 +202,10 @@ fn run_license(tail: &[String]) -> anyhow::Result<ConsoleAction> {
     }
     "deactivate" => {
       license::deactivate(&base)?;
+      if runtime::is_dry_run() {
+        println!("DRY-RUN: would deactivate this device.");
+        return Ok(ConsoleAction::ExitOk);
+      }
       println!("Deactivated this device (activation removed).");
       Ok(ConsoleAction::ExitOk)
     }
@@ -227,6 +256,10 @@ fn run_feed(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> {
         anyhow::bail!("expected: --feed import <path-to-bundle.json> <path-to-bundle.sig>");
       }
       let st = threat_feed::import(&base, std::path::Path::new(b), std::path::Path::new(s))?;
+      if runtime::is_dry_run() {
+        println!("DRY-RUN: would install threat feed bundle.");
+        return Ok(ConsoleAction::ExitOk);
+      }
       println!("Imported threat feed bundle.");
       if let Some(v) = st.rules_version {
         println!("Rules version: {v}");
@@ -249,6 +282,10 @@ fn run_feed(cfg: &Config, tail: &[String]) -> anyhow::Result<ConsoleAction> {
     "refresh-now" => {
       let res = threat_feed::refresh_now(cfg, &base);
       if !res.attempted {
+        println!("{}", res.reason);
+        return Ok(ConsoleAction::ExitOk);
+      }
+      if runtime::is_dry_run() {
         println!("{}", res.reason);
         return Ok(ConsoleAction::ExitOk);
       }
@@ -562,7 +599,7 @@ fn parse_bool(s: &str) -> Option<bool> {
 fn strip_console_flag(args: &[String]) -> Vec<String> {
   args
     .iter()
-    .filter(|a| a.as_str() != "--console")
+    .filter(|a| a.as_str() != "--console" && a.as_str() != "--dry-run")
     .cloned()
     .collect()
 }
@@ -570,6 +607,7 @@ fn strip_console_flag(args: &[String]) -> Vec<String> {
 fn print_help() {
   println!("AI Defender v{} (console mode)", env!("CARGO_PKG_VERSION"));
   println!("Commands:");
+  println!("  --dry-run (global; logs actions without side effects)");
   println!("  --killswitch on");
   println!("  --killswitch off");
   println!("  --killswitch status");

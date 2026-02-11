@@ -1,4 +1,5 @@
 use crate::paths;
+use crate::runtime;
 use crate::types::now_unix_ms;
 use anyhow::Context;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -76,6 +77,25 @@ pub fn install_license(
     anyhow::bail!(reason.unwrap_or_else(|| "license validation failed".to_string()));
   }
 
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      license_id = %payload.license_id,
+      plan = %payload.plan,
+      expires_at = payload.expires_at.unwrap_or_default(),
+      "DRY-RUN: would install license"
+    );
+    return Ok(LicenseStatus {
+      state: LicenseState::ProInvalid,
+      license_id: Some(payload.license_id),
+      plan: Some(payload.plan),
+      seats: Some(payload.seats),
+      expires_at_unix_seconds: payload.expires_at,
+      last_verified_at_unix_seconds: None,
+      checked_at_unix_seconds: now_unix_s(),
+      reason: Some("DRY-RUN: would install license".to_string()),
+    });
+  }
+
   let lic_dir = paths::license_dir(base);
   fs::create_dir_all(&lic_dir).with_context(|| format!("create {}", lic_dir.display()))?;
 
@@ -120,13 +140,32 @@ pub fn activate(base: &Path) -> anyhow::Result<LicenseStatus> {
         checked_at_unix_seconds: now_unix_s(),
         reason,
       };
-      write_status(base, &st)?;
+      if !runtime::is_dry_run() {
+        write_status(base, &st)?;
+      }
       return Ok(st);
     }
     LicenseState::ProActive => {}
     _ => {
       anyhow::bail!(reason.unwrap_or_else(|| "invalid license".to_string()));
     }
+  }
+
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      license_id = %payload.license_id,
+      "DRY-RUN: would activate license on this device"
+    );
+    return Ok(LicenseStatus {
+      state: LicenseState::ProActive,
+      license_id: Some(payload.license_id),
+      plan: Some(payload.plan),
+      seats: Some(payload.seats),
+      expires_at_unix_seconds: payload.expires_at,
+      last_verified_at_unix_seconds: Some(now_unix_s()),
+      checked_at_unix_seconds: now_unix_s(),
+      reason: Some("DRY-RUN: would activate license".to_string()),
+    });
   }
 
   // Ensure we have a stable local device id without fingerprinting.
@@ -151,6 +190,11 @@ pub fn activate(base: &Path) -> anyhow::Result<LicenseStatus> {
 }
 
 pub fn deactivate(base: &Path) -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!("DRY-RUN: would deactivate license on this device");
+    return Ok(());
+  }
+
   let act_path = paths::license_activation_path(base);
   if act_path.exists() {
     fs::remove_file(&act_path).with_context(|| format!("delete {}", act_path.display()))?;
@@ -174,7 +218,9 @@ pub fn status(base: &Path) -> LicenseStatus {
       checked_at_unix_seconds: checked,
       reason: Some("no license installed".to_string()),
     };
-    let _ = write_status(base, &st);
+    if !runtime::is_dry_run() {
+      let _ = write_status(base, &st);
+    }
     return st;
   };
 
@@ -191,7 +237,9 @@ pub fn status(base: &Path) -> LicenseStatus {
         checked_at_unix_seconds: checked,
         reason: Some(format!("invalid license: {e:#}")),
       };
-      let _ = write_status(base, &st);
+      if !runtime::is_dry_run() {
+        let _ = write_status(base, &st);
+      }
       return st;
     }
   };
@@ -207,7 +255,9 @@ pub fn status(base: &Path) -> LicenseStatus {
       checked_at_unix_seconds: checked,
       reason,
     };
-    let _ = write_status(base, &st);
+    if !runtime::is_dry_run() {
+      let _ = write_status(base, &st);
+    }
     return st;
   }
 
@@ -233,15 +283,19 @@ pub fn status(base: &Path) -> LicenseStatus {
           .to_string(),
       ),
     };
-    let _ = write_status(base, &st);
+    if !runtime::is_dry_run() {
+      let _ = write_status(base, &st);
+    }
     return st;
   }
 
   // Update last_verified_at for auditability without logging user_id.
   let mut act2 = act.unwrap();
   act2.last_verified_at = checked;
-  if let Ok(json) = serde_json::to_vec_pretty(&act2) {
-    let _ = atomic_write_file(&act_path, &json);
+  if !runtime::is_dry_run() {
+    if let Ok(json) = serde_json::to_vec_pretty(&act2) {
+      let _ = atomic_write_file(&act_path, &json);
+    }
   }
 
   let st = LicenseStatus {
@@ -254,7 +308,9 @@ pub fn status(base: &Path) -> LicenseStatus {
     checked_at_unix_seconds: checked,
     reason,
   };
-  let _ = write_status(base, &st);
+  if !runtime::is_dry_run() {
+    let _ = write_status(base, &st);
+  }
   st
 }
 

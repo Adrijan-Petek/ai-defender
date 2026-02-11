@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::license::{self, LicenseState};
 use crate::paths;
+use crate::runtime;
 use crate::types::now_unix_ms;
 use anyhow::Context;
 use std::fs;
@@ -182,7 +183,9 @@ pub fn load_current_at(base: &Path) -> Option<ThreatFeedBundle> {
   let sig_path = paths::threat_feed_sig_path(base);
 
   if let Ok(bundle) = verify_files(&bundle_path, &sig_path) {
-    let _ = mark_verified(base);
+    if !runtime::is_dry_run() {
+      let _ = mark_verified(base);
+    }
     return Some(bundle);
   }
 
@@ -236,13 +239,53 @@ pub fn import(base: &Path, src_bundle: &Path, src_sig: &Path) -> anyhow::Result<
   let bundle_json = fs::read(src_bundle).with_context(|| format!("read {}", src_bundle.display()))?;
   let sig_raw = fs::read(src_sig).with_context(|| format!("read {}", src_sig.display()))?;
 
-  verify_bundle_bytes(&bundle_json, &sig_raw)?;
+  let bundle = verify_bundle_bytes(&bundle_json, &sig_raw)?;
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      bundle_id = %bundle.bundle_id,
+      rules_version = bundle.rules_version,
+      "DRY-RUN: would install threat feed bundle"
+    );
+    return Ok(bundle_status_at(base));
+  }
   install_verified_bundle(base, &bundle_json, &sig_raw)?;
   Ok(bundle_status_at(base))
 }
 
 pub fn refresh_now(cfg: &Config, base: &Path) -> RefreshNowResult {
   let eligibility = auto_refresh_eligibility(cfg, base);
+  if runtime::is_dry_run() {
+    let endpoints = if cfg.threat_feed.endpoints.is_empty() {
+      "<none>".to_string()
+    } else {
+      cfg.threat_feed.endpoints.join(", ")
+    };
+    tracing::warn!(
+      eligible = eligibility.eligible,
+      reason = %eligibility.reason,
+      endpoints = %endpoints,
+      "DRY-RUN: would evaluate threat feed refresh eligibility and endpoint"
+    );
+    if !eligibility.eligible {
+      return RefreshNowResult {
+        attempted: false,
+        success: false,
+        reason: format!(
+          "DRY-RUN: not eligible for refresh ({}) endpoints: {}",
+          eligibility.reason, endpoints
+        ),
+      };
+    }
+    return RefreshNowResult {
+      attempted: true,
+      success: true,
+      reason: format!(
+        "DRY-RUN: would refresh threat feed from configured endpoint(s): {}",
+        endpoints
+      ),
+    };
+  }
+
   if !eligibility.eligible {
     return RefreshNowResult {
       attempted: false,
@@ -269,14 +312,13 @@ pub fn refresh_now(cfg: &Config, base: &Path) -> RefreshNowResult {
   };
 
   if let Err(e) = verify_bundle_bytes(&fetched.bundle_json, &fetched.bundle_sig) {
-      meta.last_refresh_result = Some(format!("failed: verification {}", short_error(&e)));
-      let _ = write_meta(base, &meta);
-      tracing::warn!(host = %fetched.host, reason = %short_error(&e), "threat feed verification failed");
-      return RefreshNowResult {
-        attempted: true,
-        success: false,
-        reason: format!("verification failed: {}", short_error(&e)),
-      };
+    meta.last_refresh_result = Some(format!("failed: verification {}", short_error(&e)));
+    let _ = write_meta(base, &meta);
+    tracing::warn!(host = %fetched.host, reason = %short_error(&e), "threat feed verification failed");
+    return RefreshNowResult {
+      attempted: true,
+      success: false,
+      reason: format!("verification failed: {}", short_error(&e)),
     };
   }
 
@@ -365,7 +407,9 @@ pub fn status(base: &Path) -> FeedStatus {
 
   if !st.present {
     let out = FeedStatus::none(Some("no valid bundle installed".to_string()));
-    let _ = write_state(base, &out);
+    if !runtime::is_dry_run() {
+      let _ = write_state(base, &out);
+    }
     return out;
   }
 
@@ -377,7 +421,9 @@ pub fn status(base: &Path) -> FeedStatus {
     checked_at_unix_ms: checked,
     reason: st.last_refresh_result.clone(),
   };
-  let _ = write_state(base, &out);
+  if !runtime::is_dry_run() {
+    let _ = write_state(base, &out);
+  }
   out
 }
 
@@ -386,6 +432,11 @@ fn install_verified_bundle(
   bundle_json: &[u8],
   sig_raw: &[u8],
 ) -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!("DRY-RUN: would install verified threat feed bundle");
+    return Ok(());
+  }
+
   let feed_dir = paths::threat_feed_dir(base);
   fs::create_dir_all(&feed_dir).with_context(|| format!("create {}", feed_dir.display()))?;
 

@@ -1,5 +1,5 @@
 use crate::agent::Agent;
-use crate::{config, kill_switch, license, logging, paths, threat_feed};
+use crate::{config, kill_switch, license, logging, paths, runtime, threat_feed};
 use std::sync::mpsc;
 use std::time::Duration;
 use windows_service::define_windows_service;
@@ -26,6 +26,11 @@ fn service_main(_arguments: Vec<std::ffi::OsString>) {
 }
 
 fn run_service_inner() -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    eprintln!("DRY-RUN MODE ACTIVE: refusing to run Windows Service instance.");
+    return Ok(());
+  }
+
   let base = paths::base_dir()?;
   let config_path = paths::config_path(&base);
   let cfg = config::load_or_create_default(&config_path)?;

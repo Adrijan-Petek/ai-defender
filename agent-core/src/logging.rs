@@ -21,6 +21,22 @@ pub fn init_file_and_stderr(
   init_impl(log_dir, level, retention_days, true)
 }
 
+pub fn init_stderr(level: &str) -> anyhow::Result<()> {
+  let filter = tracing_subscriber::EnvFilter::try_new(level)
+    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+  let stderr_layer = tracing_subscriber::fmt::layer()
+    .with_ansi(false)
+    .with_writer(std::io::stderr)
+    .with_target(true);
+
+  tracing_subscriber::registry()
+    .with(filter)
+    .with(stderr_layer)
+    .init();
+  Ok(())
+}
+
 fn init_impl(log_dir: &Path, level: &str, retention_days: u64, stderr: bool) -> anyhow::Result<()> {
   fs::create_dir_all(log_dir)?;
   cleanup_old_logs(log_dir, retention_days)?;

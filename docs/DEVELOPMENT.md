@@ -38,7 +38,7 @@ dotnet build ui/AI.Defender.Tray/AI.Defender.Tray.csproj -c Release
 
 ## Agent console / CLI usage (MVP)
 
-`agent-core` supports a local “console mode” intended for recovery and development:
+`agent-core` supports a local "console mode" intended for recovery and development:
 
 ```powershell
 # Kill switch (manual)
@@ -55,7 +55,7 @@ agent-core.exe --console --license deactivate
 # Threat feed (offline import, no auto-download)
 agent-core.exe --console --feed status
 agent-core.exe --console --feed verify C:\Path\to\bundle.json C:\Path\to\bundle.sig
-agent-core.exe --console --feed import C:\Path\to\bundle.json
+agent-core.exe --console --feed import C:\Path\to\bundle.json C:\Path\to\bundle.sig
 
 # Incident listing (text)
 agent-core.exe --console --incidents list --limit 10
@@ -94,3 +94,21 @@ Notes:
 - Check `C:\ProgramData\AI Defender\logs\` for agent logs.
 - If networking is locked, follow `docs/RECOVERY.md` and disable the kill switch.
 - If rules do not load in strict mode, the agent may refuse strict mode when no active rules are available.
+
+## Global dry-run mode
+
+Use `--dry-run` to validate actions without side effects.
+
+- No firewall rule changes
+- No service install/remove actions
+- No license/threat-feed writes
+- No ProgramData state writes
+- No network fetch for `--feed refresh-now`
+
+Examples:
+
+```powershell
+agent-core.exe --console --dry-run
+agent-core.exe --console --killswitch on --dry-run
+agent-core.exe --console --feed refresh-now --dry-run
+```

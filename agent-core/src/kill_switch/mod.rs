@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::paths;
+use crate::runtime;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -94,6 +95,13 @@ pub fn reconcile_on_startup(cfg: &Config) -> anyhow::Result<()> {
     }
 
     if !rules_present {
+      if runtime::is_dry_run() {
+        tracing::warn!(
+          group = FIREWALL_RULE_GROUP,
+          "DRY-RUN: would re-enable firewall kill switch rules to match persisted ON state"
+        );
+        return Ok(());
+      }
       tracing::warn!(
         group = FIREWALL_RULE_GROUP,
         "startup reconcile: state says ON but rules missing; re-enabling"
@@ -136,6 +144,15 @@ pub fn status() -> anyhow::Result<KillSwitchStatus> {
 }
 
 pub fn set_keep_locked(keep_locked: bool) -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      group = FIREWALL_RULE_GROUP,
+      keep_locked,
+      "DRY-RUN: would update kill switch keep_locked setting"
+    );
+    return Ok(());
+  }
+
   let base = paths::base_dir()?;
   let state_path = paths::killswitch_state_path(&base);
   let mut state = load_state_or_default(&state_path);
@@ -152,6 +169,14 @@ pub fn set_keep_locked(keep_locked: bool) -> anyhow::Result<()> {
 }
 
 pub fn enable_manual() -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      group = FIREWALL_RULE_GROUP,
+      "DRY-RUN: would enable firewall kill switch (group AI_DEFENDER_KILLSWITCH)"
+    );
+    return Ok(());
+  }
+
   let base = paths::base_dir()?;
   fs::create_dir_all(&base)?;
 
@@ -178,6 +203,16 @@ pub fn enable_manual() -> anyhow::Result<()> {
 }
 
 pub fn enable_auto(incident_id: &str, failsafe_minutes: u64) -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      incident_id = %incident_id,
+      group = FIREWALL_RULE_GROUP,
+      failsafe_minutes,
+      "DRY-RUN: would enable firewall kill switch (group AI_DEFENDER_KILLSWITCH)"
+    );
+    return Ok(());
+  }
+
   let base = paths::base_dir()?;
   fs::create_dir_all(&base)?;
 
@@ -224,6 +259,16 @@ pub fn disable() -> anyhow::Result<()> {
 }
 
 pub fn disable_with_reason(reason: &str, incident_id: Option<&str>) -> anyhow::Result<()> {
+  if runtime::is_dry_run() {
+    tracing::warn!(
+      group = FIREWALL_RULE_GROUP,
+      reason,
+      incident_id = incident_id.unwrap_or(""),
+      "DRY-RUN: would remove firewall rules (group AI_DEFENDER_KILLSWITCH)"
+    );
+    return Ok(());
+  }
+
   let base = paths::base_dir()?;
   let state_path = paths::killswitch_state_path(&base);
 

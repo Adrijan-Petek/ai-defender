@@ -1,4 +1,5 @@
 use crate::paths;
+use crate::runtime;
 use crate::types::{now_unix_ms, Event, FileAccessType};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -29,7 +30,9 @@ pub fn collect_once() -> anyhow::Result<Vec<Event>> {
   #[cfg(windows)]
   {
     let base = paths::base_dir()?;
-    fs::create_dir_all(&base)?;
+    if !runtime::is_dry_run() {
+      fs::create_dir_all(&base)?;
+    }
     let bookmark_path = paths::sysmon_bookmark_path(&base);
 
     let m = COLLECTOR.get_or_init(|| {
@@ -66,7 +69,14 @@ pub fn collect_once() -> anyhow::Result<Vec<Event>> {
       let bm = SysmonBookmark {
         last_record_id: c.last_record_id,
       };
-      let _ = save_bookmark(&bookmark_path, &bm);
+      if runtime::is_dry_run() {
+        tracing::warn!(
+          record_id = bm.last_record_id,
+          "DRY-RUN: would update Sysmon bookmark"
+        );
+      } else {
+        let _ = save_bookmark(&bookmark_path, &bm);
+      }
     }
 
     Ok(events)

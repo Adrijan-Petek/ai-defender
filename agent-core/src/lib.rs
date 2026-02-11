@@ -9,6 +9,7 @@ pub mod logging;
 pub mod paths;
 pub mod response_engine;
 pub mod rules_engine;
+pub mod runtime;
 pub mod service;
 pub mod threat_feed;
 pub mod types;
@@ -17,15 +18,25 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 pub fn run_console(args: &[String]) -> anyhow::Result<()> {
+  runtime::configure_from_args(args);
   let base = paths::base_dir()?;
   let config_path = paths::config_path(&base);
-  let cfg = config::load_or_create_default(&config_path)?;
+  let cfg = if runtime::is_dry_run() {
+    config::load_or_default_readonly(&config_path)?
+  } else {
+    config::load_or_create_default(&config_path)?
+  };
 
-  logging::init_file_and_stderr(
-    &paths::logs_dir(&base),
-    &cfg.logging.level,
-    cfg.logging.retention_days,
-  )?;
+  if runtime::is_dry_run() {
+    logging::init_stderr(&cfg.logging.level)?;
+    tracing::warn!("DRY-RUN MODE ACTIVE");
+  } else {
+    logging::init_file_and_stderr(
+      &paths::logs_dir(&base),
+      &cfg.logging.level,
+      cfg.logging.retention_days,
+    )?;
+  }
 
   kill_switch::reconcile_on_startup(&cfg)?;
 

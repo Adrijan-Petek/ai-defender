@@ -299,14 +299,31 @@ impl ConfigFile {
 }
 
 pub fn load_or_create_default(path: &Path) -> anyhow::Result<Config> {
+  load_impl(path, true)
+}
+
+pub fn load_or_default_readonly(path: &Path) -> anyhow::Result<Config> {
+  load_impl(path, false)
+}
+
+fn load_impl(path: &Path, allow_writes: bool) -> anyhow::Result<Config> {
   let parent = path
     .parent()
     .ok_or_else(|| anyhow::anyhow!("config path has no parent: {}", path.display()))?;
-  fs::create_dir_all(parent)?;
+  if allow_writes {
+    fs::create_dir_all(parent)?;
+  }
 
   if !path.exists() {
     let cfg = Config::default();
-    write_atomic(path, &toml::to_string_pretty(&to_config_file(&cfg))?)?;
+    if allow_writes {
+      write_atomic(path, &toml::to_string_pretty(&to_config_file(&cfg))?)?;
+    } else {
+      eprintln!(
+        "AI Defender: config missing at {}; using defaults in read-only mode (--dry-run).",
+        path.display()
+      );
+    }
     return Ok(cfg);
   }
 
@@ -314,7 +331,7 @@ pub fn load_or_create_default(path: &Path) -> anyhow::Result<Config> {
   match toml::from_str::<ConfigFile>(&raw) {
     Ok(file) => {
       let cfg = file.clone().normalize();
-      if file.needs_upgrade() {
+      if allow_writes && file.needs_upgrade() {
         let ts = std::time::SystemTime::now()
           .duration_since(std::time::UNIX_EPOCH)
           .unwrap_or_default()
@@ -328,24 +345,35 @@ pub fn load_or_create_default(path: &Path) -> anyhow::Result<Config> {
           path.display(),
           backup.display()
         );
+      } else if !allow_writes && file.needs_upgrade() {
+        eprintln!(
+          "AI Defender: config at {} needs upgrade; proceeding without writing in --dry-run mode.",
+          path.display()
+        );
       }
       Ok(cfg)
     }
     Err(e) => {
-      let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-      let backup = parent.join(format!("config.toml.bad-{ts}"));
-      let _ = fs::rename(path, &backup);
-
       let cfg = Config::default();
-      write_atomic(path, &toml::to_string_pretty(&to_config_file(&cfg))?)?;
-      eprintln!(
-        "AI Defender: invalid config at {} (backed up to {}): {e}",
-        path.display(),
-        backup.display()
-      );
+      if allow_writes {
+        let ts = std::time::SystemTime::now()
+          .duration_since(std::time::UNIX_EPOCH)
+          .unwrap_or_default()
+          .as_secs();
+        let backup = parent.join(format!("config.toml.bad-{ts}"));
+        let _ = fs::rename(path, &backup);
+        write_atomic(path, &toml::to_string_pretty(&to_config_file(&cfg))?)?;
+        eprintln!(
+          "AI Defender: invalid config at {} (backed up to {}): {e}",
+          path.display(),
+          backup.display()
+        );
+      } else {
+        eprintln!(
+          "AI Defender: invalid config at {}; using defaults in read-only mode (--dry-run): {e}",
+          path.display()
+        );
+      }
       Ok(cfg)
     }
   }
