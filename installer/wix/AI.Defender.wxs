@@ -9,8 +9,7 @@
     Manufacturer="(Publisher Placeholder)"
     Version="$(var.ProductVersion)"
     UpgradeCode="{2E5A5FE1-0BC1-4D6F-8B0B-61B7B3A5D6F1}"
-    Scope="perMachine"
-    InstallPrivileges="elevated">
+    Scope="perMachine">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of AI Defender is already installed." />
 
