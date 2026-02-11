@@ -80,4 +80,11 @@ $msiPath = Join-Path $sourceDir "AI-Defender-$productVersion.msi"
 Write-Host "Building MSI with WiX..."
 wix build $wxsPath -o $msiPath -d SourceDir=$sourceDir -d ProductVersion=$productVersion
 
+if (-not (Test-Path $msiPath)) {
+  Write-Host "WiX build completed but expected MSI was not found at: $msiPath"
+  Write-Host "Installer build directory contents:"
+  Get-ChildItem -Path $sourceDir -Recurse | ForEach-Object { Write-Host " - $($_.FullName)" }
+  throw "MSI output missing after WiX build."
+}
+
 Write-Host "Done. MSI: $msiPath"

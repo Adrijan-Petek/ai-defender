@@ -32,11 +32,20 @@ jobs:
         run: |
           pwsh -File installer/build.ps1
 
+      - name: List installer outputs
+        shell: pwsh
+        run: |
+          if (Test-Path installer/build) {
+            Get-ChildItem -Path installer/build -Recurse | Format-Table FullName, Length -AutoSize
+          } else {
+            Write-Error "installer/build directory does not exist"
+          }
+
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
           name: ai-defender-msi
-          path: installer/build/*.msi
+          path: installer/build/**/*.msi
           if-no-files-found: error
 
       - name: Upload staged payload
