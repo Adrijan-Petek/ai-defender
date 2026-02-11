@@ -122,7 +122,7 @@ fn http_get_bytes(client: &Client, url: &Url, max_bytes: usize) -> anyhow::Resul
   read_response_with_limit(response, max_bytes)
 }
 
-fn read_response_with_limit(mut response: Response, max_bytes: usize) -> anyhow::Result<Vec<u8>> {
+fn read_response_with_limit(response: Response, max_bytes: usize) -> anyhow::Result<Vec<u8>> {
   let mut out = Vec::new();
   let mut limited = response.take((max_bytes.saturating_add(1)) as u64);
   limited
